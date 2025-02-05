@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Request sudo permission at the start
+sudo -v
+
 ########################################
 # ANSI Colors
 ########################################
@@ -28,8 +31,6 @@ spinner() {
 }
 
 run_with_spinner() {
-    # Run the given command in the background, discarding output,
-    # and display a spinner until it finishes.
     "$@" > /dev/null 2>&1 &
     local pid=$!
     spinner $pid
@@ -40,17 +41,13 @@ run_with_spinner() {
 # Capture Output with tee
 ########################################
 exec > >(tee /tmp/immich_setup_summary.txt) 2>&1
-
-########################################
-# Start
-########################################
-sudo -v  # Prompt for sudo password once at the start
 clear
 
 echo "${GREEN}Starting Immich Setup Script...${RESET}"
+echo
 
 ########################################
-# Step: OS Detection
+# OS Detection
 ########################################
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -66,29 +63,36 @@ if [ "$ID" != "fedora" ] && [ "$ID" != "ubuntu" ]; then
     echo "${RED}Unsupported distro ($ID). Only fedora/ubuntu are supported.${RESET}"
     exit 1
 fi
-
 echo "${GREEN}Distro detected: $ID ($VERSION_ID)${RESET}"
+echo
 
 ########################################
-# Step: Docker Installation
+# Docker Installation
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for $ID...${RESET}"
     if [ "$ID" = "fedora" ]; then
-        run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
+        run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
         run_with_spinner sudo dnf -y install dnf-plugins-core
         run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
         run_with_spinner sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         sudo systemctl start docker
         sudo systemctl enable docker
     elif [ "$ID" = "ubuntu" ]; then
-        run_with_spinner sudo apt-get remove -y docker docker-engine docker.io containerd runc
+        export DEBIAN_FRONTEND=noninteractive
+        run_with_spinner sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+        echo "${YELLOW}Running apt-get update...${RESET}"
         run_with_spinner sudo apt-get update
+        echo "${YELLOW}Installing prerequisites...${RESET}"
         run_with_spinner sudo apt-get install -y ca-certificates curl gnupg lsb-release
+        echo "${YELLOW}Adding Docker’s official GPG key...${RESET}"
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
-            https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+        echo "${YELLOW}Setting up Docker repository...${RESET}"
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+            | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        echo "${YELLOW}Updating package list...${RESET}"
         run_with_spinner sudo apt-get update
+        echo "${YELLOW}Installing Docker packages...${RESET}"
         run_with_spinner sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
         sudo systemctl start docker
         sudo systemctl enable docker
@@ -96,62 +100,56 @@ if ! command -v docker &>/dev/null; then
 else
     echo "${GREEN}Docker is already installed.${RESET}"
 fi
+echo
 
 ########################################
-# Step: Docker Version Check
+# Docker Version & Daemon Status
 ########################################
-echo
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
 docker version
 systemctl is-active docker
+echo
 
 ########################################
-# Step: Immich Setup
+# Immich Setup
 ########################################
 if ! docker ps -a --filter=name=immich_server | grep -q immich_server; then
-    echo
-    echo "${YELLOW}Immich not found. Setting it up...${RESET}"
+    echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
     run_with_spinner wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
     run_with_spinner wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
     echo "${YELLOW}Starting Immich (timeout 120s)...${RESET}"
-    run_with_spinner timeout 120 docker compose up -d || {
-        echo "${RED}docker compose up timed out. Exiting.${RESET}"
-        exit 1
-    }
+    run_with_spinner timeout 120 docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Immich setup complete.${RESET}"
 else
-    echo
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
 fi
+echo
 
 ########################################
-# Step: Protecting Immich Data
+# Protecting Immich Data
 ########################################
 data_dir="./immich/library"
 if [ -d "$data_dir" ]; then
     random_dir=$(printf "%06d" $((RANDOM % 1000000)))
     safe_dir="./${random_dir}"
-    echo
     echo "${YELLOW}Moving $data_dir to $safe_dir, then moving it back (preserving permissions)...${RESET}"
     run_with_spinner sudo rm -rf "$safe_dir"
     run_with_spinner sudo mv "$data_dir" "$safe_dir"
     run_with_spinner sudo mv "$safe_dir" "$data_dir"
 else
-    echo
     echo "${RED}Data directory not found at $data_dir; skipping protection.${RESET}"
 fi
+echo
 
 ########################################
-# Step: ghcr.io Login
+# ghcr.io Login
 ########################################
-echo
 if [ ! -f ~/.docker/config.json ]; then
     echo "${YELLOW}No Docker credentials found.${RESET}"
 else
-    echo "${YELLOW}Existing Docker credentials; leaving as is.${RESET}"
+    echo "${YELLOW}Existing Docker credentials found; leaving them.${RESET}"
 fi
-
 echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry).${RESET}"
 attempt=1
 logged_in=false
@@ -171,33 +169,32 @@ if [ "$logged_in" != "true" ]; then
     exit 1
 fi
 echo "${GREEN}ghcr.io login successful.${RESET}"
-
-########################################
-# Step: Skip Credential Helper
-########################################
 echo
-echo "${YELLOW}Skipping credential helper; storing credentials in plain text.${RESET}"
 
 ########################################
-# Step: Checking Immich Server Image
+# Skip Credential Helper
+########################################
+echo "${YELLOW}Skipping credential helper; storing credentials in plain text.${RESET}"
+echo
+
+########################################
+# Checking Immich Server Image
 ########################################
 if docker images ghcr.io/immich-app/immich-server:release >/dev/null 2>&1; then
-    echo
     echo "${GREEN}Immich server image found locally.${RESET}"
 else
-    echo
     echo "${YELLOW}Pulling Immich server image from ghcr.io...${RESET}"
     run_with_spinner docker pull ghcr.io/immich-app/immich-server:release
 fi
+echo
 
 ########################################
-# Step: Container Status & Health
+# Container Status & Health
 ########################################
-echo
 if docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
     echo "${GREEN}Immich container is running.${RESET}"
 else
-    echo "${RED}Immich container not running; trying restart...${RESET}"
+    echo "${RED}Immich container not running; attempting restart...${RESET}"
     run_with_spinner docker rm -f immich_server 2>/dev/null
     run_with_spinner docker restart immich_server
     sleep 5
@@ -205,11 +202,11 @@ fi
 
 health=$(docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
 echo "Immich container health status: $health"
+echo
 
 ########################################
-# Step: Watchtower + Updates
+# Watchtower & Updates
 ########################################
-echo
 . /etc/os-release
 if [ "$ID" = "fedora" ]; then
     echo "${YELLOW}Updating packages on Fedora...${RESET}"
@@ -223,15 +220,14 @@ echo "${YELLOW}Installing Watchtower for container auto-updates...${RESET}"
 if docker ps -a --filter=name=watchtower | grep -qi watchtower; then
     run_with_spinner docker rm -f watchtower
 fi
-
 run_with_spinner docker run -d --name watchtower --restart always \
     -v /var/run/docker.sock:/var/run/docker.sock \
     containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
+echo
 
 ########################################
-# Step: Security Updates
+# Security Updates
 ########################################
-echo
 if [ "$ID" = "fedora" ]; then
     run_with_spinner sudo dnf install -y dnf-automatic
     sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
@@ -248,11 +244,11 @@ elif [ "$ID" = "ubuntu" ]; then
     ( sudo crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/unattended-upgrade -d" ) | sudo crontab -
     echo "${GREEN}unattended-upgrades is set for 3 AM security updates.${RESET}"
 fi
+echo
 
 ########################################
-# Step: Monthly Full System Update
+# Monthly Full System Updates
 ########################################
-echo
 if [ "$ID" = "fedora" ]; then
     sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
 [Unit]
@@ -280,13 +276,13 @@ EOF
     echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each month.${RESET}"
 elif [ "$ID" = "ubuntu" ]; then
     ( sudo crontab -l 2>/dev/null; echo "0 4 1 * * /usr/bin/apt-get update && /usr/bin/apt-get upgrade -y" ) | sudo crontab -
-    echo "${GREEN}Monthly system update cron set for Ubuntu at 4 AM on 1st of each month.${RESET}"
+    echo "${GREEN}Monthly system update cron set for Ubuntu at 4 AM on the 1st of each month.${RESET}"
 fi
+echo
 
 ########################################
 # Final Short Summary
 ########################################
-echo
 echo "${GREEN}=== Short Summary ===${RESET}"
 short_report="Immich Setup Complete.
 Docker installed and running.
