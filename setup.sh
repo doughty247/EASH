@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Request sudo permission at the start
+# Request sudo permission upfront
 sudo -v
+unset DOCKER_HOST  # Ensure Docker uses the default socket (/var/run/docker.sock)
 
 ########################################
 # ANSI Colors
@@ -63,6 +64,7 @@ if [ "$ID" != "fedora" ] && [ "$ID" != "ubuntu" ]; then
     echo "${RED}Unsupported distro ($ID). Only fedora/ubuntu are supported.${RESET}"
     exit 1
 fi
+
 echo "${GREEN}Distro detected: $ID ($VERSION_ID)${RESET}"
 echo
 
@@ -205,7 +207,7 @@ echo "Immich container health status: $health"
 echo
 
 ########################################
-# Watchtower & Updates
+# Watchtower & System Updates
 ########################################
 . /etc/os-release
 if [ "$ID" = "fedora" ]; then
