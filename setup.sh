@@ -92,7 +92,7 @@ sudo systemctl is-active docker
 echo
 
 ########################################
-# Docker Group Check and Auto‑Logout
+# Docker Group Check & Auto-Logout
 ########################################
 # Ensure the docker group exists.
 if ! getent group docker >/dev/null; then
@@ -100,14 +100,34 @@ if ! getent group docker >/dev/null; then
     sudo groupadd docker
 fi
 
-# Check if the user is in the docker group.
+# Check if the current user is in the docker group.
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}You are not in the 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. Press Enter to logout now. (You will then need to log back in and re-run this script.)${RESET}"
-    read -r   # Wait for user to press Enter
+    echo "${GREEN}Done. Press Enter to log out now. (You will need to log back in and re-run this script.)${RESET}"
+    read -r
     sudo pkill -KILL -u "$USER"
     exit 0
+fi
+echo
+
+########################################
+# Restore Backup if Needed
+########################################
+# Check if the active data directory does not exist but a backup exists.
+if [ ! -d "./immich/library" ]; then
+    found_backup=false
+    for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
+        if [ -d "$b" ]; then
+            echo "${YELLOW}Found backup directory: $b. Restoring it to ./immich/library...${RESET}"
+            sudo mv "$b" "./immich/library"
+            found_backup=true
+            break
+        fi
+    done
+    if [ "$found_backup" = false ]; then
+        echo "${YELLOW}No backup directory found to restore.${RESET}"
+    fi
 fi
 echo
 
@@ -130,12 +150,11 @@ echo
 ########################################
 # Protecting Immich Data (Backup)
 ########################################
-# Stop the Immich container and move the library folder to a backup location.
 backup_required=false
 data_dir="./immich/library"
 if [ -d "$data_dir" ]; then
     echo "${YELLOW}Stopping Immich container to backup data directory...${RESET}"
-    sudo docker stop immich_server
+    sudo docker stop immich_server || true
     random_dir=$(printf "%06d" $((RANDOM % 1000000)))
     backup_dir="./backup_${random_dir}"
     echo "${YELLOW}Moving $data_dir to $backup_dir for backup...${RESET}"
@@ -201,9 +220,11 @@ if sudo docker ps --filter=name=immich_server --filter=status=running | grep -q 
     echo "${GREEN}Immich container is running.${RESET}"
 else
     echo "${RED}Immich container not running; attempting restart...${RESET}"
-    run_with_spinner sudo docker rm -f immich_server 2>/dev/null
-    run_with_spinner sudo docker restart immich_server
-    sleep 5
+    { 
+      run_with_spinner sudo docker rm -f immich_server 2>/dev/null
+      run_with_spinner sudo docker restart immich_server
+      sleep 5
+    } || echo "${RED}Warning: Failed to restart Immich container. Continuing...${RESET}"
 fi
 
 health=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
@@ -275,7 +296,6 @@ echo
 ########################################
 if [ "${backup_required:-false}" = true ]; then
     echo "${YELLOW}Restoring Immich data directory from backup...${RESET}"
-    # Move the backup back to the original location and start the container.
     run_with_spinner sudo mv "$backup_dir" "$data_dir"
     sudo docker start immich_server
     echo "${GREEN}Immich data directory restored.${RESET}"
@@ -283,7 +303,7 @@ fi
 echo
 
 ########################################
-# Final Short Summary and GitHub PAT Explanation
+# Final Short Summary and GitHub PAT Instructions
 ########################################
 echo "${GREEN}=== Short Summary ===${RESET}"
 short_report="Immich Setup Complete.
@@ -296,8 +316,8 @@ Monthly full system update scheduled.
 To create your GitHub Personal Access Token (PAT) for GHCR:
 1. Log in to GitHub.
 2. Go to 'Settings' > 'Developer settings' > 'Personal access tokens'.
-3. Click 'Generate new token', set an appropriate name, and select the 'read:packages' scope.
+3. Click 'Generate new token', set a name, and select the 'read:packages' scope.
 4. Generate the token and store it securely.
-Use this token when prompted during docker login."
+Use this token when prompted during 'docker login'."
 echo "$short_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
