@@ -95,7 +95,7 @@ echo
 # Docker Group Check and Auto‑Logout
 ########################################
 if ! getent group docker >/dev/null; then
-    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
+    echo "${YELLOW}Group 'docker' does not exist. Creating it...${RESET}"
     sudo groupadd docker
 fi
 
@@ -112,7 +112,6 @@ echo
 ########################################
 # Restore Backup if Needed
 ########################################
-# If the active data directory doesn't exist but a backup exists, restore it.
 if [ ! -d "./immich/library" ]; then
     found_backup=false
     for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
@@ -165,7 +164,7 @@ fi
 echo
 
 ########################################
-# ghcr.io Login (Skip Explanation if Credentials Exist)
+# ghcr.io Login (if no credentials exist)
 ########################################
 if [ -f ~/.docker/config.json ]; then
     echo "${GREEN}Existing Docker credentials found; skipping ghcr.io login.${RESET}"
@@ -210,17 +209,25 @@ fi
 echo
 
 ########################################
-# Container Status & Health
+# Container Status & Health (with Restart Loop)
 ########################################
-if sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
-    echo "${GREEN}Immich container is running.${RESET}"
-else
-    echo "${RED}Immich container not running; attempting restart...${RESET}"
-    { 
-      run_with_spinner sudo docker rm -f immich_server 2>/dev/null
-      run_with_spinner sudo docker restart immich_server
-      sleep 5
-    } || echo "${RED}Warning: Failed to restart Immich container. Continuing...${RESET}"
+attempt=1
+max_attempts=3
+while [ $attempt -le $max_attempts ]; do
+    if sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
+        echo "${GREEN}Immich container is running.${RESET}"
+        break
+    else
+        echo "${RED}Immich container not running; attempting restart (Attempt $attempt)...${RESET}"
+        run_with_spinner sudo docker restart immich_server || true
+        sleep 15
+    fi
+    attempt=$((attempt + 1))
+done
+
+if ! sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
+    echo "${RED}Immich container is still not running after $max_attempts attempts. Exiting.${RESET}"
+    exit 1
 fi
 
 health=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
@@ -299,7 +306,7 @@ fi
 echo
 
 ########################################
-# Final Short Summary
+# Final Short Summary and GitHub PAT Instructions
 ########################################
 echo "${GREEN}=== Short Summary ===${RESET}"
 short_report="Immich Setup Complete.
@@ -307,6 +314,13 @@ Docker installed and running.
 Immich container health: $health
 Watchtower installed for auto-updates.
 Security updates configured.
-Monthly full system update scheduled."
+Monthly full system update scheduled.
+
+To create your GitHub Personal Access Token (PAT) for GHCR:
+1. Log in to GitHub.
+2. Navigate to 'Settings' > 'Developer settings' > 'Personal access tokens'.
+3. Click 'Generate new token', give it a name, and select the 'read:packages' scope.
+4. Generate the token and store it securely.
+Use this token when prompted during 'docker login'."
 echo "$short_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
