@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Unset any custom DOCKER_HOST to use the default socket
+# Unset any custom DOCKER_HOST to ensure Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission up front
+# Request sudo permission upfront.
 sudo -v
 
 ########################################
@@ -71,14 +71,17 @@ echo "${GREEN}Distro detected: $ID ($VERSION_ID)${RESET}"
 echo
 
 ########################################
-# Check if User is in Docker Group
+# Docker Group Check and Automatic Fix
 ########################################
 if ! groups "$USER" | grep -qw docker; then
-    echo "${RED}Error: You are not in the 'docker' group. Please run:${RESET}"
-    echo "${YELLOW}sudo usermod -aG docker \$USER${RESET}"
-    echo "${RED}and then log out and log back in before re-running this script.${RESET}"
+    echo "${YELLOW}You are not in the 'docker' group.${RESET}"
+    echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
+    sudo usermod -aG docker "$USER"
+    echo "${GREEN}Done. You must now log out and log back in for this to take effect."
+    echo "${RED}Please log out, log back in, and re-run this script.${RESET}"
     exit 1
 fi
+echo
 
 ########################################
 # Docker Installation
@@ -117,7 +120,7 @@ fi
 echo
 
 ########################################
-# Docker Version Check
+# Docker Version & Daemon Status
 ########################################
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
 docker version
