@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Unset any custom DOCKER_HOST to ensure Docker uses the default socket.
+# Unset any custom DOCKER_HOST so Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission upfront.
+# Request sudo permission up front.
 sudo -v
 
 ########################################
@@ -46,74 +46,55 @@ run_with_spinner() {
 exec > >(tee /tmp/immich_setup_summary.txt) 2>&1
 clear
 
-echo "${GREEN}Starting Immich Setup Script...${RESET}"
+echo "${GREEN}Starting Immich Setup Script on Fedora...${RESET}"
 echo
 
 ########################################
-# OS Detection
+# OS Detection (Fedora Only)
 ########################################
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-elif command -v lsb_release &>/dev/null; then
-    ID=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
-    VERSION_ID=$(lsb_release -sr)
 else
     echo "${RED}OS detection failed. Exiting.${RESET}"
     exit 1
 fi
 
-if [ "$ID" != "fedora" ] && [ "$ID" != "ubuntu" ]; then
-    echo "${RED}Unsupported distro ($ID). Only fedora/ubuntu are supported.${RESET}"
+if [ "$ID" != "fedora" ]; then
+    echo "${RED}This script is designed for Fedora only. Detected distro: $ID. Exiting.${RESET}"
     exit 1
 fi
 
-echo "${GREEN}Distro detected: $ID ($VERSION_ID)${RESET}"
+echo "${GREEN}Distro detected: Fedora ($VERSION_ID)${RESET}"
 echo
 
 ########################################
 # Docker Group Check and Automatic Fix
 ########################################
+if ! getent group docker >/dev/null; then
+    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
+    sudo groupadd docker
+fi
+
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}You are not in the 'docker' group.${RESET}"
     echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. You must now log out and log back in for this to take effect."
-    echo "${RED}Please log out, log back in, and re-run this script.${RESET}"
+    echo "${GREEN}Done. Please log out and log back in for changes to take effect, then re-run this script.${RESET}"
     exit 1
 fi
 echo
 
 ########################################
-# Docker Installation
+# Docker Installation (Fedora)
 ########################################
 if ! command -v docker &>/dev/null; then
-    echo "${YELLOW}Docker not found. Installing Docker for $ID...${RESET}"
-    if [ "$ID" = "fedora" ]; then
-        run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
-        run_with_spinner sudo dnf -y install dnf-plugins-core
-        run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-        run_with_spinner sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    elif [ "$ID" = "ubuntu" ]; then
-        export DEBIAN_FRONTEND=noninteractive
-        run_with_spinner sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
-        echo "${YELLOW}Running apt-get update...${RESET}"
-        run_with_spinner sudo apt-get update
-        echo "${YELLOW}Installing prerequisites...${RESET}"
-        run_with_spinner sudo apt-get install -y ca-certificates curl gnupg lsb-release
-        echo "${YELLOW}Adding Docker’s official GPG key...${RESET}"
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo "${YELLOW}Setting up Docker repository...${RESET}"
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-            | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-        echo "${YELLOW}Updating package list...${RESET}"
-        run_with_spinner sudo apt-get update
-        echo "${YELLOW}Installing Docker packages...${RESET}"
-        run_with_spinner sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    fi
+    echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
+    run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
+    run_with_spinner sudo dnf -y install dnf-plugins-core
+    run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+    run_with_spinner sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    sudo systemctl start docker
+    sudo systemctl enable docker
 else
     echo "${GREEN}Docker is already installed.${RESET}"
 fi
@@ -226,13 +207,8 @@ echo
 # Watchtower & Updates
 ########################################
 . /etc/os-release
-if [ "$ID" = "fedora" ]; then
-    echo "${YELLOW}Updating packages on Fedora...${RESET}"
-    run_with_spinner sudo dnf update -y
-elif [ "$ID" = "ubuntu" ]; then
-    echo "${YELLOW}Updating packages on Ubuntu...${RESET}"
-    run_with_spinner sudo apt-get update && sudo apt-get upgrade -y
-fi
+echo "${YELLOW}Updating packages on Fedora...${RESET}"
+run_with_spinner sudo dnf update -y
 
 echo "${YELLOW}Installing Watchtower for container auto-updates...${RESET}"
 if docker ps -a --filter=name=watchtower | grep -qi watchtower; then
@@ -256,11 +232,6 @@ if [ "$ID" = "fedora" ]; then
     sudo systemctl daemon-reload
     sudo systemctl enable --now dnf-automatic.timer
     echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
-elif [ "$ID" = "ubuntu" ]; then
-    run_with_spinner sudo apt-get install -y unattended-upgrades
-    sudo sed -i "s|//Unattended-Upgrade::Automatic-Reboot \"false\";|Unattended-Upgrade::Automatic-Reboot \"true\";|" /etc/apt/apt.conf.d/50unattended-upgrades
-    ( sudo crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/unattended-upgrade -d" ) | sudo crontab -
-    echo "${GREEN}unattended-upgrades is set for 3 AM security updates.${RESET}"
 fi
 echo
 
@@ -292,9 +263,6 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable --now full-update.timer
     echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each month.${RESET}"
-elif [ "$ID" = "ubuntu" ]; then
-    ( sudo crontab -l 2>/dev/null; echo "0 4 1 * * /usr/bin/apt-get update && /usr/bin/apt-get upgrade -y" ) | sudo crontab -
-    echo "${GREEN}Monthly system update cron set for Ubuntu at 4 AM on the 1st of each month.${RESET}"
 fi
 echo
 
