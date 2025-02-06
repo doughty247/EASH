@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Request sudo permission upfront
+# Unset any custom DOCKER_HOST to use the default socket
+unset DOCKER_HOST
+
+# Request sudo permission up front
 sudo -v
-unset DOCKER_HOST  # Ensure Docker uses the default socket (/var/run/docker.sock)
 
 ########################################
 # ANSI Colors
@@ -69,6 +71,16 @@ echo "${GREEN}Distro detected: $ID ($VERSION_ID)${RESET}"
 echo
 
 ########################################
+# Check if User is in Docker Group
+########################################
+if ! groups "$USER" | grep -qw docker; then
+    echo "${RED}Error: You are not in the 'docker' group. Please run:${RESET}"
+    echo "${YELLOW}sudo usermod -aG docker \$USER${RESET}"
+    echo "${RED}and then log out and log back in before re-running this script.${RESET}"
+    exit 1
+fi
+
+########################################
 # Docker Installation
 ########################################
 if ! command -v docker &>/dev/null; then
@@ -91,7 +103,7 @@ if ! command -v docker &>/dev/null; then
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
         echo "${YELLOW}Setting up Docker repository...${RESET}"
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-            | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
         echo "${YELLOW}Updating package list...${RESET}"
         run_with_spinner sudo apt-get update
         echo "${YELLOW}Installing Docker packages...${RESET}"
@@ -105,7 +117,7 @@ fi
 echo
 
 ########################################
-# Docker Version & Daemon Status
+# Docker Version Check
 ########################################
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
 docker version
@@ -152,6 +164,7 @@ if [ ! -f ~/.docker/config.json ]; then
 else
     echo "${YELLOW}Existing Docker credentials found; leaving them.${RESET}"
 fi
+
 echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry).${RESET}"
 attempt=1
 logged_in=false
@@ -207,7 +220,7 @@ echo "Immich container health status: $health"
 echo
 
 ########################################
-# Watchtower & System Updates
+# Watchtower & Updates
 ########################################
 . /etc/os-release
 if [ "$ID" = "fedora" ]; then
