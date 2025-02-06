@@ -4,7 +4,7 @@ set -euo pipefail
 # Unset any custom DOCKER_HOST so Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission upfront.
+# Request sudo permission at the start.
 sudo -v
 
 ########################################
@@ -95,7 +95,7 @@ echo
 # Docker Group Check and Auto‑Logout
 ########################################
 if ! getent group docker >/dev/null; then
-    echo "${YELLOW}Group 'docker' does not exist. Creating it...${RESET}"
+    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
     sudo groupadd docker
 fi
 
@@ -209,7 +209,7 @@ fi
 echo
 
 ########################################
-# Container Status & Health (with Restart Loop)
+# Container Status & Health (with Retry)
 ########################################
 attempt=1
 max_attempts=3
@@ -220,6 +220,7 @@ while [ $attempt -le $max_attempts ]; do
     else
         echo "${RED}Immich container not running; attempting restart (Attempt $attempt)...${RESET}"
         run_with_spinner sudo docker restart immich_server || true
+        echo "${YELLOW}Waiting 15 seconds before re-checking...${RESET}"
         sleep 15
     fi
     attempt=$((attempt + 1))
@@ -306,21 +307,38 @@ fi
 echo
 
 ########################################
-# Final Short Summary and GitHub PAT Instructions
+# Final Status Report
 ########################################
-echo "${GREEN}=== Short Summary ===${RESET}"
-short_report="Immich Setup Complete.
-Docker installed and running.
-Immich container health: $health
-Watchtower installed for auto-updates.
-Security updates configured.
-Monthly full system update scheduled.
+echo "${GREEN}=== Status Report ===${RESET}"
+# Re-check container health; if not healthy, retry the restart step.
+attempt=1
+max_attempts=3
+while [ $attempt -le $max_attempts ]; do
+    health=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
+    if [ "$health" = "healthy" ]; then
+        break
+    else
+        echo "${RED}Status check: Immich container health is '$health'. Retrying container restart in 10 seconds because the container is not healthy.${RESET}"
+        sudo docker restart immich_server
+        sleep 10
+    fi
+    attempt=$((attempt + 1))
+done
 
-To create your GitHub Personal Access Token (PAT) for GHCR:
-1. Log in to GitHub.
-2. Navigate to 'Settings' > 'Developer settings' > 'Personal access tokens'.
-3. Click 'Generate new token', give it a name, and select the 'read:packages' scope.
-4. Generate the token and store it securely.
-Use this token when prompted during 'docker login'."
-echo "$short_report"
+if [ "$health" != "healthy" ]; then
+    echo "${RED}Immich container is still not healthy after retries. Exiting.${RESET}"
+    exit 1
+fi
+
+echo "Immich container health status: $health"
+echo
+
+echo "${GREEN}=== Status Report ===${RESET}"
+status_report="Immich Setup Complete.
+Docker is installed and running.
+Immich container health: $health.
+Watchtower is installed for auto-updates.
+Security updates are configured.
+Monthly full system updates are scheduled."
+echo "$status_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
