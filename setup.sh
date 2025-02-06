@@ -92,15 +92,13 @@ sudo systemctl is-active docker
 echo
 
 ########################################
-# Docker Group Check & Auto-Logout
+# Docker Group Check and Auto‑Logout
 ########################################
-# Ensure the docker group exists.
 if ! getent group docker >/dev/null; then
-    echo "${YELLOW}Group 'docker' does not exist. Creating it...${RESET}"
+    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
     sudo groupadd docker
 fi
 
-# Check if the current user is in the docker group.
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}You are not in the 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
@@ -114,7 +112,7 @@ echo
 ########################################
 # Restore Backup if Needed
 ########################################
-# Check if the active data directory does not exist but a backup exists.
+# If the active data directory doesn't exist but a backup exists, restore it.
 if [ ! -d "./immich/library" ]; then
     found_backup=false
     for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
@@ -167,33 +165,31 @@ fi
 echo
 
 ########################################
-# ghcr.io Login
+# ghcr.io Login (Skip Explanation if Credentials Exist)
 ########################################
-if [ ! -f ~/.docker/config.json ]; then
-    echo "${YELLOW}No Docker credentials found.${RESET}"
+if [ -f ~/.docker/config.json ]; then
+    echo "${GREEN}Existing Docker credentials found; skipping ghcr.io login.${RESET}"
 else
-    echo "${YELLOW}Existing Docker credentials found; leaving them.${RESET}"
-fi
+    echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry).${RESET}"
+    attempt=1
+    logged_in=false
+    while [ $attempt -le 3 ]; do
+        echo "Login Attempt $attempt (input from TTY):"
+        if sudo docker login ghcr.io < /dev/tty; then
+            logged_in=true
+            break
+        else
+            echo "${RED}Attempt $attempt failed.${RESET}"
+        fi
+        attempt=$((attempt + 1))
+    done
 
-echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry).${RESET}"
-attempt=1
-logged_in=false
-while [ $attempt -le 3 ]; do
-    echo "Login Attempt $attempt (input from TTY):"
-    if sudo docker login ghcr.io < /dev/tty; then
-        logged_in=true
-        break
-    else
-        echo "${RED}Attempt $attempt failed.${RESET}"
+    if [ "$logged_in" != "true" ]; then
+        echo "${RED}ghcr.io login failed after 3 attempts. Exiting.${RESET}"
+        exit 1
     fi
-    attempt=$((attempt + 1))
-done
-
-if [ "$logged_in" != "true" ]; then
-    echo "${RED}ghcr.io login failed after 3 attempts. Exiting.${RESET}"
-    exit 1
+    echo "${GREEN}ghcr.io login successful.${RESET}"
 fi
-echo "${GREEN}ghcr.io login successful.${RESET}"
 echo
 
 ########################################
@@ -303,7 +299,7 @@ fi
 echo
 
 ########################################
-# Final Short Summary and GitHub PAT Instructions
+# Final Short Summary
 ########################################
 echo "${GREEN}=== Short Summary ===${RESET}"
 short_report="Immich Setup Complete.
@@ -311,13 +307,6 @@ Docker installed and running.
 Immich container health: $health
 Watchtower installed for auto-updates.
 Security updates configured.
-Monthly full system update scheduled.
-
-To create your GitHub Personal Access Token (PAT) for GHCR:
-1. Log in to GitHub.
-2. Go to 'Settings' > 'Developer settings' > 'Personal access tokens'.
-3. Click 'Generate new token', set a name, and select the 'read:packages' scope.
-4. Generate the token and store it securely.
-Use this token when prompted during 'docker login'."
+Monthly full system update scheduled."
 echo "$short_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
