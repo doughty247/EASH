@@ -4,7 +4,7 @@ set -euo pipefail
 # Unset any custom DOCKER_HOST so Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission up front.
+# Request sudo permission upfront.
 sudo -v
 
 ########################################
@@ -68,23 +68,6 @@ echo "${GREEN}Distro detected: Fedora ($VERSION_ID)${RESET}"
 echo
 
 ########################################
-# Docker Group Check and Automatic Fix
-########################################
-if ! getent group docker >/dev/null; then
-    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
-    sudo groupadd docker
-fi
-
-if ! groups "$USER" | grep -qw docker; then
-    echo "${YELLOW}You are not in the 'docker' group.${RESET}"
-    echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
-    sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. Please log out and log back in for changes to take effect, then re-run this script.${RESET}"
-    exit 1
-fi
-echo
-
-########################################
 # Docker Installation (Fedora)
 ########################################
 if ! command -v docker &>/dev/null; then
@@ -106,6 +89,25 @@ echo
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
 docker version
 systemctl is-active docker
+echo
+
+########################################
+# Docker Group Check (After Docker Installed)
+########################################
+# Check if the docker group exists; if not, create it.
+if ! getent group docker >/dev/null; then
+    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
+    sudo groupadd docker
+fi
+
+# Check if the current user is in the docker group.
+if ! groups "$USER" | grep -qw docker; then
+    echo "${YELLOW}You are not in the 'docker' group.${RESET}"
+    echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
+    sudo usermod -aG docker "$USER"
+    echo "${GREEN}Done. Please log out and log back in for the changes to take effect, then re-run this script.${RESET}"
+    exit 1
+fi
 echo
 
 ########################################
@@ -222,24 +224,23 @@ echo
 ########################################
 # Security Updates
 ########################################
-if [ "$ID" = "fedora" ]; then
-    run_with_spinner sudo dnf install -y dnf-automatic
-    sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
-    sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
-    sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
-    sudo mkdir -p /etc/systemd/system/dnf-automatic.timer.d
-    echo -e "[Timer]\nOnCalendar=*-*-* 03:00:00" | sudo tee /etc/systemd/system/dnf-automatic.timer.d/override.conf
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now dnf-automatic.timer
-    echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
-fi
+echo "${YELLOW}Configuring security updates...${RESET}"
+run_with_spinner sudo dnf install -y dnf-automatic
+sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
+sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
+sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
+sudo mkdir -p /etc/systemd/system/dnf-automatic.timer.d
+echo -e "[Timer]\nOnCalendar=*-*-* 03:00:00" | sudo tee /etc/systemd/system/dnf-automatic.timer.d/override.conf
+sudo systemctl daemon-reload
+sudo systemctl enable --now dnf-automatic.timer
+echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
 echo
 
 ########################################
 # Monthly Full System Updates
 ########################################
-if [ "$ID" = "fedora" ]; then
-    sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
+echo "${YELLOW}Setting up monthly full system updates...${RESET}"
+sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
 [Unit]
 Description=Full System Update Service
 
@@ -248,7 +249,7 @@ Type=oneshot
 ExecStart=/usr/bin/dnf upgrade -y
 EOF
 
-    sudo tee /etc/systemd/system/full-update.timer >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/full-update.timer >/dev/null <<'EOF'
 [Unit]
 Description=Timer for Full System Update Service
 
@@ -260,10 +261,9 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now full-update.timer
-    echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each month.${RESET}"
-fi
+sudo systemctl daemon-reload
+sudo systemctl enable --now full-update.timer
+echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each month.${RESET}"
 echo
 
 ########################################
