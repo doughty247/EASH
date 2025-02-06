@@ -4,7 +4,7 @@ set -euo pipefail
 # Unset any custom DOCKER_HOST so Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission at the start.
+# Request sudo permission upfront.
 sudo -v
 
 ########################################
@@ -68,7 +68,7 @@ echo "${GREEN}Distro detected: Fedora ($VERSION_ID)${RESET}"
 echo
 
 ########################################
-# Docker Installation (Fedora)
+# Docker Installation
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
@@ -92,32 +92,35 @@ sudo systemctl is-active docker
 echo
 
 ########################################
-# Docker Group Check and Automatic Fix
+# Docker Group Check and Auto‑Logout
 ########################################
+# Ensure the docker group exists.
 if ! getent group docker >/dev/null; then
-    echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
+    echo "${YELLOW}Group 'docker' does not exist. Creating it...${RESET}"
     sudo groupadd docker
 fi
 
+# Check if the user is in the docker group.
 if ! groups "$USER" | grep -qw docker; then
-    echo "${YELLOW}You are not in the 'docker' group.${RESET}"
-    echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
+    echo "${YELLOW}You are not in the 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. Please log out and log back in for the changes to take effect, then re-run this script.${RESET}"
-    exit 1
+    echo "${GREEN}Done. Press Enter to logout now. (You will then need to log back in and re-run this script.)${RESET}"
+    read -r   # Wait for user to press Enter
+    sudo pkill -KILL -u "$USER"
+    exit 0
 fi
 echo
 
 ########################################
-# Immich Setup
+# Immich Setup (Timeout 30s)
 ########################################
 if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
     run_with_spinner wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
     run_with_spinner wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
-    echo "${YELLOW}Starting Immich (timeout 120s)...${RESET}"
-    run_with_spinner timeout 120 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    echo "${YELLOW}Starting Immich (timeout 30s)...${RESET}"
+    run_with_spinner timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Immich setup complete.${RESET}"
 else
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
@@ -125,18 +128,22 @@ fi
 echo
 
 ########################################
-# Protecting Immich Data
+# Protecting Immich Data (Backup)
 ########################################
+# Stop the Immich container and move the library folder to a backup location.
+backup_required=false
 data_dir="./immich/library"
 if [ -d "$data_dir" ]; then
+    echo "${YELLOW}Stopping Immich container to backup data directory...${RESET}"
+    sudo docker stop immich_server
     random_dir=$(printf "%06d" $((RANDOM % 1000000)))
-    safe_dir="./${random_dir}"
-    echo "${YELLOW}Moving $data_dir to $safe_dir, then moving it back (preserving permissions)...${RESET}"
-    run_with_spinner sudo rm -rf "$safe_dir"
-    run_with_spinner sudo mv "$data_dir" "$safe_dir"
-    run_with_spinner sudo mv "$safe_dir" "$data_dir"
+    backup_dir="./backup_${random_dir}"
+    echo "${YELLOW}Moving $data_dir to $backup_dir for backup...${RESET}"
+    run_with_spinner sudo rm -rf "$backup_dir"
+    run_with_spinner sudo mv "$data_dir" "$backup_dir"
+    backup_required=true
 else
-    echo "${RED}Data directory not found at $data_dir; skipping protection.${RESET}"
+    echo "${RED}Data directory not found at $data_dir; skipping backup.${RESET}"
 fi
 echo
 
@@ -204,9 +211,8 @@ echo "Immich container health status: $health"
 echo
 
 ########################################
-# Watchtower & Updates
+# Watchtower & System Updates
 ########################################
-. /etc/os-release
 echo "${YELLOW}Updating packages on Fedora...${RESET}"
 run_with_spinner sudo dnf update -y
 
@@ -220,7 +226,7 @@ run_with_spinner sudo docker run -d --name watchtower --restart always \
 echo
 
 ########################################
-# Security Updates
+# Security Updates (dnf-automatic)
 ########################################
 echo "${YELLOW}Configuring security updates...${RESET}"
 run_with_spinner sudo dnf install -y dnf-automatic
@@ -265,7 +271,19 @@ echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each
 echo
 
 ########################################
-# Final Short Summary
+# Restore Immich Data (if backup was made)
+########################################
+if [ "${backup_required:-false}" = true ]; then
+    echo "${YELLOW}Restoring Immich data directory from backup...${RESET}"
+    # Move the backup back to the original location and start the container.
+    run_with_spinner sudo mv "$backup_dir" "$data_dir"
+    sudo docker start immich_server
+    echo "${GREEN}Immich data directory restored.${RESET}"
+fi
+echo
+
+########################################
+# Final Short Summary and GitHub PAT Explanation
 ########################################
 echo "${GREEN}=== Short Summary ===${RESET}"
 short_report="Immich Setup Complete.
@@ -273,7 +291,13 @@ Docker installed and running.
 Immich container health: $health
 Watchtower installed for auto-updates.
 Security updates configured.
-Monthly full system update scheduled."
+Monthly full system update scheduled.
 
+To create your GitHub Personal Access Token (PAT) for GHCR:
+1. Log in to GitHub.
+2. Go to 'Settings' > 'Developer settings' > 'Personal access tokens'.
+3. Click 'Generate new token', set an appropriate name, and select the 'read:packages' scope.
+4. Generate the token and store it securely.
+Use this token when prompted during docker login."
 echo "$short_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
