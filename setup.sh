@@ -4,7 +4,7 @@ set -euo pipefail
 # Unset any custom DOCKER_HOST so Docker uses the default socket.
 unset DOCKER_HOST
 
-# Request sudo permission upfront.
+# Request sudo permission at the start.
 sudo -v
 
 ########################################
@@ -84,23 +84,21 @@ fi
 echo
 
 ########################################
-# Docker Version & Daemon Status
+# Docker Version & Daemon Status (using sudo)
 ########################################
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
-docker version
-systemctl is-active docker
+sudo docker version
+sudo systemctl is-active docker
 echo
 
 ########################################
-# Docker Group Check (After Docker Installed)
+# Docker Group Check and Automatic Fix
 ########################################
-# Check if the docker group exists; if not, create it.
 if ! getent group docker >/dev/null; then
     echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
     sudo groupadd docker
 fi
 
-# Check if the current user is in the docker group.
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}You are not in the 'docker' group.${RESET}"
     echo "${YELLOW}Adding $USER to the 'docker' group...${RESET}"
@@ -113,13 +111,13 @@ echo
 ########################################
 # Immich Setup
 ########################################
-if ! docker ps -a --filter=name=immich_server | grep -q immich_server; then
+if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
     run_with_spinner wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
     run_with_spinner wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
     echo "${YELLOW}Starting Immich (timeout 120s)...${RESET}"
-    run_with_spinner timeout 120 docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    run_with_spinner timeout 120 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Immich setup complete.${RESET}"
 else
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
@@ -156,7 +154,7 @@ attempt=1
 logged_in=false
 while [ $attempt -le 3 ]; do
     echo "Login Attempt $attempt (input from TTY):"
-    if docker login ghcr.io < /dev/tty; then
+    if sudo docker login ghcr.io < /dev/tty; then
         logged_in=true
         break
     else
@@ -181,27 +179,27 @@ echo
 ########################################
 # Checking Immich Server Image
 ########################################
-if docker images ghcr.io/immich-app/immich-server:release >/dev/null 2>&1; then
+if sudo docker images ghcr.io/immich-app/immich-server:release >/dev/null 2>&1; then
     echo "${GREEN}Immich server image found locally.${RESET}"
 else
     echo "${YELLOW}Pulling Immich server image from ghcr.io...${RESET}"
-    run_with_spinner docker pull ghcr.io/immich-app/immich-server:release
+    run_with_spinner sudo docker pull ghcr.io/immich-app/immich-server:release
 fi
 echo
 
 ########################################
 # Container Status & Health
 ########################################
-if docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
+if sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
     echo "${GREEN}Immich container is running.${RESET}"
 else
     echo "${RED}Immich container not running; attempting restart...${RESET}"
-    run_with_spinner docker rm -f immich_server 2>/dev/null
-    run_with_spinner docker restart immich_server
+    run_with_spinner sudo docker rm -f immich_server 2>/dev/null
+    run_with_spinner sudo docker restart immich_server
     sleep 5
 fi
 
-health=$(docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
+health=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
 echo "Immich container health status: $health"
 echo
 
@@ -213,10 +211,10 @@ echo "${YELLOW}Updating packages on Fedora...${RESET}"
 run_with_spinner sudo dnf update -y
 
 echo "${YELLOW}Installing Watchtower for container auto-updates...${RESET}"
-if docker ps -a --filter=name=watchtower | grep -qi watchtower; then
-    run_with_spinner docker rm -f watchtower
+if sudo docker ps -a --filter=name=watchtower | grep -qi watchtower; then
+    run_with_spinner sudo docker rm -f watchtower
 fi
-run_with_spinner docker run -d --name watchtower --restart always \
+run_with_spinner sudo docker run -d --name watchtower --restart always \
     -v /var/run/docker.sock:/var/run/docker.sock \
     containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
 echo
