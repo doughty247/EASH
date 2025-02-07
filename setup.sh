@@ -197,51 +197,23 @@ fi
 echo
 
 ########################################
-# Container Status & Health (Restart with Checks)
+# Container Health Check
 ########################################
-attempt=1
-max_attempts=2
-while [ $attempt -le $max_attempts ]; do
-    echo "${YELLOW}Waiting 30 seconds for Immich container to start...${RESET}"
-    sleep 30
-    total_wait=0
-    healthy_found=false
-    while [ $total_wait -lt 120 ]; do
-        if sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
-            healthy=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
-            if [ "$healthy" = "healthy" ]; then
-                healthy_found=true
-                break
-            fi
-        fi
-        sleep 5
-        total_wait=$((total_wait + 5))
-    done
-    if [ "$healthy_found" = true ]; then
-        echo "${GREEN}Immich container is running and healthy.${RESET}"
-        break
-    else
-        echo "${RED}Immich container did not become healthy after 2 minutes on attempt $attempt. Restarting container...${RESET}"
-        sudo docker restart immich_server
-        sleep 5
+echo "${YELLOW}Waiting up to 300 seconds for the Immich container to become healthy...${RESET}"
+if ! timeout 300 bash -c '
+  while [ "$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null)" != "healthy" ]; do
+    sleep 5
+  done
+'; then
+    echo "${RED}Immich container did not become healthy in time. Restarting container...${RESET}"
+    sudo docker restart immich_server
+    sleep 10
+    if [ "$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null)" != "healthy" ]; then
+        echo "${RED}Immich container still not healthy after restart. Exiting.${RESET}"
+        exit 1
     fi
-    attempt=$((attempt + 1))
-done
-
-if ! sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
-    echo "${RED}Immich container is still not running after retry attempts. Reinstalling Immich...${RESET}"
-    cd ~/immich || exit 1
-    sudo docker compose down --volumes --remove-orphans
-    sudo docker rm -f immich_server 2>/dev/null
-    sudo docker rmi ghcr.io/immich-app/immich-server:release 2>/dev/null
-    echo "${YELLOW}Reinstalling Immich...${RESET}"
-    sudo docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
-    echo "${RED}Reinstallation complete but container still not healthy. Restarting setup script...${RESET}"
-    exec "$0"
 fi
-
-health=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
-echo "Immich container health status: $health"
+echo "${GREEN}Immich container is running and healthy.${RESET}"
 echo
 
 ########################################
@@ -335,7 +307,7 @@ echo
 echo "${GREEN}=== Status Report ===${RESET}"
 status_report="Immich Setup Complete.
 Docker is installed and running.
-Immich container health: $health.
+Immich container health: $(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown").
 Watchtower is installed for auto-updates.
 Security updates are configured.
 Monthly full system updates are scheduled."
