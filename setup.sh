@@ -117,15 +117,19 @@ fi
 echo
 
 ########################################
-# Immich Setup (Timeout 30s)
+# Immich Setup (Try 10s then 30s timeout)
 ########################################
 if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
     wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
     wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
-    echo "${YELLOW}Starting Immich (timeout 30s)...${RESET}"
-    timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+
+    echo "${YELLOW}Starting Immich (initial timeout 10s)...${RESET}"
+    if ! timeout 10 sudo docker compose up -d; then
+        echo "${YELLOW}Initial startup did not complete in 10 seconds. Retrying with a 30-second timeout...${RESET}"
+        timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    fi
     echo "${GREEN}Immich setup complete.${RESET}"
 else
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
