@@ -72,6 +72,7 @@ echo
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
+    run_with_spinner sudo dnf upgrade -y
     run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
     run_with_spinner sudo dnf -y install dnf-plugins-core
     run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
