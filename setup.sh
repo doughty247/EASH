@@ -199,37 +199,45 @@ fi
 echo
 
 ########################################
-# Setup Docker Credential Helper
+# Setup Docker Credential Helper (Using docker-credential-pass)
 ########################################
-echo "${YELLOW}Setting up Docker credential helper...${RESET}"
-# Check if docker-credential-secretservice is installed; install if missing.
-if ! command -v docker-credential-secretservice &>/dev/null; then
-    echo "${YELLOW}docker-credential-secretservice not found. Installing it...${RESET}"
-    sudo dnf install -y docker-credential-secretservice
+echo "${YELLOW}Setting up Docker credential helper using 'pass'...${RESET}"
+# Ensure that 'pass' is installed.
+if ! command -v pass &>/dev/null; then
+    echo "${YELLOW}'pass' not found. Installing 'pass'...${RESET}"
+    sudo dnf install -y pass
 fi
 
-# Create or update Docker config to use the secretservice credentials helper.
-mkdir -p ~/.docker
-CONFIG_FILE=~/.docker/config.json
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "{}" > "$CONFIG_FILE"
+# Attempt to install docker-credential-pass.
+if ! command -v docker-credential-pass &>/dev/null; then
+    echo "${YELLOW}docker-credential-pass not found. Installing it...${RESET}"
+    sudo dnf install -y docker-credential-pass --skip-unavailable || true
 fi
 
-if grep -q '"credsStore":' "$CONFIG_FILE"; then
-    sed -i 's/"credsStore": *"[^"]*"/"credsStore": "secretservice"/' "$CONFIG_FILE"
-else
-    if [ "$(cat "$CONFIG_FILE")" = "{}" ]; then
-         echo '{ "credsStore": "secretservice" }' > "$CONFIG_FILE"
-    else
-         if command -v jq &>/dev/null; then
-             jq '. + {"credsStore": "secretservice"}' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
-         else
-             # Fallback: append manually (assumes simple JSON structure)
-             sed -i 's/^{/{\n  "credsStore": "secretservice",/' "$CONFIG_FILE"
-         fi
+if command -v docker-credential-pass &>/dev/null; then
+    # Configure Docker to use 'pass' as the credentials helper.
+    mkdir -p ~/.docker
+    CONFIG_FILE=~/.docker/config.json
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "{}" > "$CONFIG_FILE"
     fi
+    if grep -q '"credsStore":' "$CONFIG_FILE"; then
+        sed -i 's/"credsStore": *"[^"]*"/"credsStore": "pass"/' "$CONFIG_FILE"
+    else
+        if [ "$(cat "$CONFIG_FILE")" = "{}" ]; then
+             echo '{ "credsStore": "pass" }' > "$CONFIG_FILE"
+        else
+             if command -v jq &>/dev/null; then
+                 jq '. + {"credsStore": "pass"}' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
+             else
+                 sed -i 's/^{/{\n  "credsStore": "pass",/' "$CONFIG_FILE"
+             fi
+        fi
+    fi
+    echo "${GREEN}Docker credential helper configured to use 'pass'.${RESET}"
+else
+    echo "${RED}Error: docker-credential-pass is not available. Please install it manually, or remove the credentials helper configuration.${RESET}"
 fi
-echo "${GREEN}Docker credentials helper is configured to use secretservice.${RESET}"
 echo
 
 ########################################
@@ -357,7 +365,7 @@ echo "${GREEN}=== Status Report ===${RESET}"
 status_report="Immich Setup Complete.
 Docker is installed and running.
 Immich container running (if not healthy, a warning was issued).
-Docker credential helper is configured.
+Docker credential helper is configured (using 'pass').
 Watchtower is installed for auto-updates.
 Security updates are configured.
 Monthly full system updates are scheduled."
