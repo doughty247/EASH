@@ -47,7 +47,7 @@ echo
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
-    # Disable exit-on-error temporarily for non-critical package removals/upgrades.
+    # Temporarily disable exit-on-error for non-critical package removals/upgrades.
     set +e
     sudo dnf upgrade -y
     sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
@@ -117,19 +117,15 @@ fi
 echo
 
 ########################################
-# Immich Setup (Try 10s then 30s timeout)
+# Immich Setup (Without Timeout)
 ########################################
 if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
     wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
     wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
-
-    echo "${YELLOW}Starting Immich (initial timeout 10s)...${RESET}"
-    if ! timeout 10 sudo docker compose up -d; then
-        echo "${YELLOW}Initial startup did not complete in 10 seconds. Retrying with a 30-second timeout...${RESET}"
-        timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
-    fi
+    echo "${YELLOW}Starting Immich container...${RESET}"
+    sudo docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Immich setup complete.${RESET}"
 else
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
@@ -239,7 +235,7 @@ if ! sudo docker ps --filter=name=immich_server --filter=status=running | grep -
     sudo docker rm -f immich_server 2>/dev/null
     sudo docker rmi ghcr.io/immich-app/immich-server:release 2>/dev/null
     echo "${YELLOW}Reinstalling Immich...${RESET}"
-    timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    sudo docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
     echo "${RED}Reinstallation complete but container still not healthy. Restarting setup script...${RESET}"
     exec "$0"
 fi
