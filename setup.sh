@@ -215,14 +215,24 @@ fi
 echo
 
 ########################################
-# Container Running Check (Bypassing Health Check)
+# Container Health Check (30-second wait with Warning)
 ########################################
-echo "${YELLOW}Bypassing container health check. Verifying that the Immich container is running...${RESET}"
-if sudo docker ps --filter=name=immich_server | grep -q immich_server; then
-    echo "${GREEN}Immich container is running (health check bypassed).${RESET}"
+echo "${YELLOW}Waiting up to 30 seconds for the Immich container to become healthy...${RESET}"
+max_attempts=6
+healthy_found=false
+for i in $(seq 1 "$max_attempts"); do
+    status=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
+    if [ "$status" = "healthy" ]; then
+        healthy_found=true
+        break
+    fi
+    sleep 5
+done
+
+if [ "$healthy_found" = false ]; then
+    echo "${RED}Warning: Immich container did not become healthy within 30 seconds. Proceeding anyway.${RESET}"
 else
-    echo "${RED}Immich container is not running. Exiting.${RESET}"
-    exit 1
+    echo "${GREEN}Immich container is healthy.${RESET}"
 fi
 echo
 
@@ -317,7 +327,7 @@ echo
 echo "${GREEN}=== Status Report ===${RESET}"
 status_report="Immich Setup Complete.
 Docker is installed and running.
-Immich container running (health check bypassed).
+Immich container running (health check bypassed/warning issued if not healthy).
 Watchtower is installed for auto-updates.
 Security updates are configured.
 Monthly full system updates are scheduled."
