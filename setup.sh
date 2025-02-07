@@ -12,12 +12,11 @@ sudo -v
 ########################################
 GREEN=$(tput setaf 2)
 YELLOW=$(tput setaf 3)
-BLUE=$(tput setaf 4)
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
 ########################################
-# Capture Output with tee
+# Log Output
 ########################################
 exec > >(tee /tmp/immich_setup_summary.txt) 2>&1
 clear
@@ -44,21 +43,23 @@ echo "${GREEN}Distro detected: Fedora ($VERSION_ID)${RESET}"
 echo
 
 ########################################
-# Docker Installation
+# Docker Installation (Recommended for Immich)
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
-    # Temporarily disable exit on error for the installation block.
+    # Disable exit-on-error temporarily for non-critical package removals/upgrades.
     set +e
     sudo dnf upgrade -y
     sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
     sudo dnf -y install dnf-plugins-core
+    set -e
 
-    # Instead of using 'dnf config-manager', create the Docker repo file manually.
-    sudo tee /etc/yum.repos.d/docker-ce.repo >/dev/null <<'EOF'
+    # Manually create the Docker repository file using the current Fedora version.
+    FEDORA_VERSION=$(rpm -E %fedora)
+    sudo tee /etc/yum.repos.d/docker-ce.repo >/dev/null <<EOF
 [docker-ce-stable]
-name=Docker CE Stable - $basearch
-baseurl=https://download.docker.com/linux/fedora/$releasever/$basearch/stable
+name=Docker CE Stable - \$basearch
+baseurl=https://download.docker.com/linux/fedora/${FEDORA_VERSION}/\$basearch/stable
 enabled=1
 gpgcheck=1
 gpgkey=https://download.docker.com/linux/fedora/gpg
@@ -67,15 +68,13 @@ EOF
     sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl start docker
     sudo systemctl enable docker
-    # Re-enable exit on error.
-    set -e
 else
     echo "${GREEN}Docker is already installed.${RESET}"
 fi
 echo
 
 ########################################
-# Docker Version & Daemon Status (using sudo)
+# Docker Version & Daemon Status
 ########################################
 echo "${GREEN}Docker Version & Daemon Status:${RESET}"
 sudo docker version
@@ -91,11 +90,9 @@ if ! getent group docker >/dev/null; then
 fi
 
 if ! groups "$USER" | grep -qw docker; then
-    echo "${YELLOW}You are not in the 'docker' group. Adding $USER to the 'docker' group...${RESET}"
+    echo "${YELLOW}User not in 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. Press Enter to log out now. (You will need to log back in and re-run this script.)${RESET}"
-    read -r
-    sudo pkill -KILL -u "$USER"
+    echo "${GREEN}Done. Please log out and log back in, then re-run this script.${RESET}"
     exit 0
 fi
 echo
@@ -233,14 +230,12 @@ done
 
 if ! sudo docker ps --filter=name=immich_server --filter=status=running | grep -q immich_server; then
     echo "${RED}Immich container is still not running after retry attempts. Reinstalling Immich...${RESET}"
-    # Reinstall Immich:
     cd ~/immich || exit 1
     sudo docker compose down --volumes --remove-orphans
     sudo docker rm -f immich_server 2>/dev/null
     sudo docker rmi ghcr.io/immich-app/immich-server:release 2>/dev/null
     echo "${YELLOW}Reinstalling Immich...${RESET}"
     timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
-    # Start over: re-run the script.
     echo "${RED}Reinstallation complete but container still not healthy. Restarting setup script...${RESET}"
     exec "$0"
 fi
@@ -264,9 +259,6 @@ sudo docker run -d --name watchtower --restart always \
     containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
 echo
 
-########################################
-# Security Updates (dnf-automatic)
-########################################
 echo "${YELLOW}Configuring security updates...${RESET}"
 sudo dnf install -y dnf-automatic
 sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
@@ -279,9 +271,6 @@ sudo systemctl enable --now dnf-automatic.timer
 echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
 echo
 
-########################################
-# Monthly Full System Updates
-########################################
 echo "${YELLOW}Setting up monthly full system updates...${RESET}"
 sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
 [Unit]
