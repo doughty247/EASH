@@ -43,6 +43,24 @@ echo "${GREEN}Distro detected: Fedora ($VERSION_ID)${RESET}"
 echo
 
 ########################################
+# Network & Certificate Setup
+########################################
+echo "${YELLOW}Updating CA certificates...${RESET}"
+sudo dnf install -y ca-certificates
+sudo update-ca-trust extract
+
+# If you are behind a proxy, configure Docker's proxy settings here.
+# For example:
+# sudo mkdir -p /etc/systemd/system/docker.service.d/
+# sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
+# [Service]
+# Environment="HTTP_PROXY=http://your.proxy.server:port"
+# Environment="HTTPS_PROXY=http://your.proxy.server:port"
+# EOF
+# sudo systemctl daemon-reload
+# sudo systemctl restart docker
+
+########################################
 # Docker Installation (Recommended for Immich)
 ########################################
 if ! command -v docker &>/dev/null; then
