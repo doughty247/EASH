@@ -117,7 +117,7 @@ fi
 echo
 
 ########################################
-# Immich Setup (Without Timeout)
+# Immich Setup (Without Timeout Wrapper)
 ########################################
 if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
@@ -197,22 +197,40 @@ fi
 echo
 
 ########################################
-# Container Health Check
+# Container Health Check (Loop-Based)
 ########################################
 echo "${YELLOW}Waiting up to 300 seconds for the Immich container to become healthy...${RESET}"
-if ! timeout 300 bash -c '
-  while [ "$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null)" != "healthy" ]; do
+max_attempts=60
+healthy_found=false
+
+for i in $(seq 1 "$max_attempts"); do
+    status=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
+    if [ "$status" = "healthy" ]; then
+        healthy_found=true
+        break
+    fi
     sleep 5
-  done
-'; then
+done
+
+if [ "$healthy_found" = false ]; then
     echo "${RED}Immich container did not become healthy in time. Restarting container...${RESET}"
     sudo docker restart immich_server
     sleep 10
-    if [ "$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null)" != "healthy" ]; then
+    healthy_found=false
+    for i in $(seq 1 "$max_attempts"); do
+        status=$(sudo docker inspect --format="{{.State.Health.Status}}" immich_server 2>/dev/null || echo "unknown")
+        if [ "$status" = "healthy" ]; then
+            healthy_found=true
+            break
+        fi
+        sleep 5
+    done
+    if [ "$healthy_found" = false ]; then
         echo "${RED}Immich container still not healthy after restart. Exiting.${RESET}"
         exit 1
     fi
 fi
+
 echo "${GREEN}Immich container is running and healthy.${RESET}"
 echo
 
