@@ -17,30 +17,6 @@ RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
 ########################################
-# Spinner for Long Commands
-########################################
-spinner() {
-    local pid=$1
-    local delay=0.1
-    local spinstr="|/-\\"
-    while kill -0 "$pid" 2>/dev/null; do
-        for (( i=0; i<${#spinstr}; i++ )); do
-            printf " [%c]  " "${spinstr:$i:1}"
-            sleep $delay
-            printf "\b\b\b\b\b\b"
-        done
-    done
-    printf "    \b\b\b\b"
-}
-
-run_with_spinner() {
-    "$@" > /dev/null 2>&1 &
-    local pid=$!
-    spinner $pid
-    wait $pid
-}
-
-########################################
 # Capture Output with tee
 ########################################
 exec > >(tee /tmp/immich_setup_summary.txt) 2>&1
@@ -74,11 +50,11 @@ if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
     # Temporarily disable exit on error for the installation block.
     set +e
-    run_with_spinner sudo dnf upgrade -y
-    run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
-    run_with_spinner sudo dnf -y install dnf-plugins-core
-    run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-    run_with_spinner sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    sudo dnf upgrade -y
+    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
+    sudo dnf -y install dnf-plugins-core
+    sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+    sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl start docker
     sudo systemctl enable docker
     # Re-enable exit on error.
@@ -139,10 +115,10 @@ echo
 if ! sudo docker ps -a --filter=name=immich_server | grep -q immich_server; then
     echo "${YELLOW}Immich not found. Setting it up using official docker-compose instructions...${RESET}"
     mkdir -p ~/immich && cd ~/immich || exit 1
-    run_with_spinner wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-    run_with_spinner wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
+    wget -q -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+    wget -q -O .env https://github.com/immich-app/immich/releases/latest/download/example.env
     echo "${YELLOW}Starting Immich (timeout 30s)...${RESET}"
-    run_with_spinner timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Immich setup complete.${RESET}"
 else
     echo "${GREEN}Immich container already exists; skipping setup.${RESET}"
@@ -160,8 +136,8 @@ if [ -d "$data_dir" ]; then
     random_dir=$(printf "%06d" $((RANDOM % 1000000)))
     backup_dir="./backup_${random_dir}"
     echo "${YELLOW}Moving $data_dir to $backup_dir for backup...${RESET}"
-    run_with_spinner sudo rm -rf "$backup_dir"
-    run_with_spinner sudo mv "$data_dir" "$backup_dir"
+    sudo rm -rf "$backup_dir"
+    sudo mv "$data_dir" "$backup_dir"
     backup_required=true
 else
     echo "${RED}Data directory not found at $data_dir; skipping backup.${RESET}"
@@ -209,7 +185,7 @@ if sudo docker images ghcr.io/immich-app/immich-server:release >/dev/null 2>&1; 
     echo "${GREEN}Immich server image found locally.${RESET}"
 else
     echo "${YELLOW}Pulling Immich server image from ghcr.io...${RESET}"
-    run_with_spinner sudo docker pull ghcr.io/immich-app/immich-server:release
+    sudo docker pull ghcr.io/immich-app/immich-server:release
 fi
 echo
 
@@ -253,7 +229,7 @@ if ! sudo docker ps --filter=name=immich_server --filter=status=running | grep -
     sudo docker rm -f immich_server 2>/dev/null
     sudo docker rmi ghcr.io/immich-app/immich-server:release 2>/dev/null
     echo "${YELLOW}Reinstalling Immich...${RESET}"
-    run_with_spinner timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
+    timeout 30 sudo docker compose up -d || { echo "${RED}docker compose up timed out. Exiting.${RESET}"; exit 1; }
     # Start over: re-run the script.
     echo "${RED}Reinstallation complete but container still not healthy. Restarting setup script...${RESET}"
     exec "$0"
@@ -267,13 +243,13 @@ echo
 # Watchtower & System Updates
 ########################################
 echo "${YELLOW}Updating packages on Fedora...${RESET}"
-run_with_spinner sudo dnf update -y
+sudo dnf update -y
 
 echo "${YELLOW}Installing Watchtower for container auto-updates...${RESET}"
 if sudo docker ps -a --filter=name=watchtower | grep -qi watchtower; then
-    run_with_spinner sudo docker rm -f watchtower
+    sudo docker rm -f watchtower
 fi
-run_with_spinner sudo docker run -d --name watchtower --restart always \
+sudo docker run -d --name watchtower --restart always \
     -v /var/run/docker.sock:/var/run/docker.sock \
     containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
 echo
@@ -282,7 +258,7 @@ echo
 # Security Updates (dnf-automatic)
 ########################################
 echo "${YELLOW}Configuring security updates...${RESET}"
-run_with_spinner sudo dnf install -y dnf-automatic
+sudo dnf install -y dnf-automatic
 sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
 sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
 sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
@@ -328,7 +304,7 @@ echo
 ########################################
 if [ "${backup_required:-false}" = true ]; then
     echo "${YELLOW}Restoring Immich data directory from backup...${RESET}"
-    run_with_spinner sudo mv "$backup_dir" "$data_dir"
+    sudo mv "$backup_dir" "$data_dir"
     sudo docker start immich_server
     echo "${GREEN}Immich data directory restored.${RESET}"
 fi
