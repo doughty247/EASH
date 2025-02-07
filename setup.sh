@@ -259,11 +259,28 @@ sudo docker run -d --name watchtower --restart always \
     containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
 echo
 
+########################################
+# Security Updates (dnf-automatic)
+########################################
 echo "${YELLOW}Configuring security updates...${RESET}"
 sudo dnf install -y dnf-automatic
-sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
-sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
-sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
+if [ ! -f /etc/dnf/automatic.conf ]; then
+    echo "${YELLOW}/etc/dnf/automatic.conf not found. Creating default configuration...${RESET}"
+    sudo tee /etc/dnf/automatic.conf >/dev/null <<'EOF'
+[commands]
+upgrade_type = security
+apply_updates = yes
+reboot = True
+
+[emitters]
+emit_via = stdio
+EOF
+else
+    sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
+    sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
+    sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
+fi
+
 sudo mkdir -p /etc/systemd/system/dnf-automatic.timer.d
 echo -e "[Timer]\nOnCalendar=*-*-* 03:00:00" | sudo tee /etc/systemd/system/dnf-automatic.timer.d/override.conf
 sudo systemctl daemon-reload
@@ -271,6 +288,9 @@ sudo systemctl enable --now dnf-automatic.timer
 echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
 echo
 
+########################################
+# Monthly Full System Updates
+########################################
 echo "${YELLOW}Setting up monthly full system updates...${RESET}"
 sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
 [Unit]
