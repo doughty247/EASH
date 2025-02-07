@@ -72,13 +72,17 @@ echo
 ########################################
 if ! command -v docker &>/dev/null; then
     echo "${YELLOW}Docker not found. Installing Docker for Fedora...${RESET}"
-    run_with_spinner sudo dnf upgrade -y || true
-    run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
+    # Temporarily disable exit on error for the installation block.
+    set +e
+    run_with_spinner sudo dnf upgrade -y
+    run_with_spinner sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine
     run_with_spinner sudo dnf -y install dnf-plugins-core
     run_with_spinner sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
     run_with_spinner sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl start docker
     sudo systemctl enable docker
+    # Re-enable exit on error.
+    set -e
 else
     echo "${GREEN}Docker is already installed.${RESET}"
 fi
