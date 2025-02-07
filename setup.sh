@@ -49,17 +49,6 @@ echo "${YELLOW}Updating CA certificates...${RESET}"
 sudo dnf install -y ca-certificates
 sudo update-ca-trust extract
 
-# If you are behind a proxy, configure Docker's proxy settings here.
-# For example:
-# sudo mkdir -p /etc/systemd/system/docker.service.d/
-# sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
-# [Service]
-# Environment="HTTP_PROXY=http://your.proxy.server:port"
-# Environment="HTTPS_PROXY=http://your.proxy.server:port"
-# EOF
-# sudo systemctl daemon-reload
-# sudo systemctl restart docker
-
 ########################################
 # Docker Installation (Recommended for Immich)
 ########################################
@@ -100,7 +89,7 @@ sudo systemctl is-active docker
 echo
 
 ########################################
-# Docker Group Check and Auto‑Logout
+# Docker Group Check and Automatic Logout
 ########################################
 if ! getent group docker >/dev/null; then
     echo "${YELLOW}Group 'docker' does not exist. Creating group 'docker'...${RESET}"
@@ -110,7 +99,11 @@ fi
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}User not in 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}Done. Please log out and log back in, then re-run this script.${RESET}"
+    echo "${GREEN}You will be logged out in a moment. Log in again and re-run the script to continue."
+    sleep 5
+    echo "Press Enter to log out now..."
+    read -r  # wait for Enter
+    sudo pkill -KILL -u "$USER"
     exit 0
 fi
 echo
@@ -170,12 +163,21 @@ fi
 echo
 
 ########################################
-# ghcr.io Login (if no credentials exist)
+# ghcr.io Login (GitHub Container Registry)
 ########################################
+# Explanation:
+# To access GitHub Container Registry (ghcr.io), you need to create a GitHub Personal Access Token.
+# 1. Go to: https://github.com/settings/tokens
+# 2. Click "Generate new token".
+# 3. Give your token a descriptive name.
+# 4. Under "Select scopes", check "read:packages" (and others if needed).
+# 5. Generate the token and copy it (you won't be able to see it again).
+# 6. When prompted by the script, use your GitHub username and paste the token as the password.
+
 if [ -f ~/.docker/config.json ]; then
     echo "${GREEN}Existing Docker credentials found; skipping ghcr.io login.${RESET}"
 else
-    echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry).${RESET}"
+    echo "${GREEN}Please log in to ghcr.io (GitHub Container Registry) using your GitHub Personal Access Token.${RESET}"
     attempt=1
     logged_in=false
     while [ $attempt -le 3 ]; do
@@ -215,9 +217,9 @@ fi
 echo
 
 ########################################
-# Container Health Check (30-second wait with Warning)
+# Container Running Check (Bypassing Health Check)
 ########################################
-echo "${YELLOW}Waiting up to 30 seconds for the Immich container to become healthy...${RESET}"
+echo "${YELLOW}Waiting up to 30 seconds for the Immich container to report healthy...${RESET}"
 max_attempts=6
 healthy_found=false
 for i in $(seq 1 "$max_attempts"); do
@@ -327,7 +329,7 @@ echo
 echo "${GREEN}=== Status Report ===${RESET}"
 status_report="Immich Setup Complete.
 Docker is installed and running.
-Immich container running (health check bypassed/warning issued if not healthy).
+Immich container running (if not healthy, a warning was issued).
 Watchtower is installed for auto-updates.
 Security updates are configured.
 Monthly full system updates are scheduled."
