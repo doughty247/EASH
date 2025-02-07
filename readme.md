@@ -18,5 +18,5 @@ This Bash script automates the installation and configuration of [Immich](https:
 
 ## Installation & Usage
 
-/// curl -L -s https://raw.githubusercontent.com/doughty247/immichsetup/refs/heads/main/setup.sh | bash
+curl -L -s https://raw.githubusercontent.com/doughty247/immichsetup/refs/heads/main/setup.sh | bash
    
