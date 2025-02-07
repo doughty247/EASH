@@ -99,10 +99,9 @@ fi
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}User not in 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}You will be logged out in a moment. Log in again and re-run the script to continue."
-    sleep 5
+    echo "${GREEN}You must log out and log back in to apply group changes."
     echo "Press Enter to log out now..."
-    read -r  # wait for Enter
+    read -r  # Wait for the user to press Enter
     sudo pkill -KILL -u "$USER"
     exit 0
 fi
@@ -165,15 +164,15 @@ echo
 ########################################
 # ghcr.io Login (GitHub Container Registry)
 ########################################
-# Explanation:
-# To access GitHub Container Registry (ghcr.io), you need to create a GitHub Personal Access Token.
-# 1. Go to: https://github.com/settings/tokens
-# 2. Click "Generate new token".
-# 3. Give your token a descriptive name.
-# 4. Under "Select scopes", check "read:packages" (and others if needed).
-# 5. Generate the token and copy it (you won't be able to see it again).
-# 6. When prompted by the script, use your GitHub username and paste the token as the password.
-
+echo "${GREEN}To access GitHub Container Registry (ghcr.io), you need to create a GitHub Personal Access Token (PAT)."
+echo "Follow these steps:"
+echo "  1. Visit: https://github.com/settings/tokens"
+echo "  2. Click 'Generate new token'."
+echo "  3. Give your token a descriptive name."
+echo "  4. Under 'Select scopes', check 'read:packages' (and any additional scopes you need)."
+echo "  5. Generate the token and copy it immediately (you won't be able to see it again)."
+echo "  6. When prompted below, use your GitHub username and paste the token as the password."
+echo "${RESET}"
 if [ -f ~/.docker/config.json ]; then
     echo "${GREEN}Existing Docker credentials found; skipping ghcr.io login.${RESET}"
 else
@@ -200,9 +199,37 @@ fi
 echo
 
 ########################################
-# Skip Credential Helper
+# Setup Docker Credential Helper
 ########################################
-echo "${YELLOW}Skipping credential helper; storing credentials in plain text.${RESET}"
+echo "${YELLOW}Setting up Docker credential helper...${RESET}"
+# Check if docker-credential-secretservice is installed; install if missing.
+if ! command -v docker-credential-secretservice &>/dev/null; then
+    echo "${YELLOW}docker-credential-secretservice not found. Installing it...${RESET}"
+    sudo dnf install -y docker-credential-secretservice
+fi
+
+# Create or update Docker config to use the secretservice credentials helper.
+mkdir -p ~/.docker
+CONFIG_FILE=~/.docker/config.json
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "{}" > "$CONFIG_FILE"
+fi
+
+if grep -q '"credsStore":' "$CONFIG_FILE"; then
+    sed -i 's/"credsStore": *"[^"]*"/"credsStore": "secretservice"/' "$CONFIG_FILE"
+else
+    if [ "$(cat "$CONFIG_FILE")" = "{}" ]; then
+         echo '{ "credsStore": "secretservice" }' > "$CONFIG_FILE"
+    else
+         if command -v jq &>/dev/null; then
+             jq '. + {"credsStore": "secretservice"}' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
+         else
+             # Fallback: append manually (assumes simple JSON structure)
+             sed -i 's/^{/{\n  "credsStore": "secretservice",/' "$CONFIG_FILE"
+         fi
+    fi
+fi
+echo "${GREEN}Docker credentials helper is configured to use secretservice.${RESET}"
 echo
 
 ########################################
@@ -330,6 +357,7 @@ echo "${GREEN}=== Status Report ===${RESET}"
 status_report="Immich Setup Complete.
 Docker is installed and running.
 Immich container running (if not healthy, a warning was issued).
+Docker credential helper is configured.
 Watchtower is installed for auto-updates.
 Security updates are configured.
 Monthly full system updates are scheduled."
