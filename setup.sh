@@ -99,9 +99,9 @@ fi
 if ! groups "$USER" | grep -qw docker; then
     echo "${YELLOW}User not in 'docker' group. Adding $USER to the 'docker' group...${RESET}"
     sudo usermod -aG docker "$USER"
-    echo "${GREEN}You must log out and log back in to apply group changes."
-    echo "Press Enter to log out now..."
-    read -r  # Wait for the user to press Enter
+    echo "${GREEN}You need to log out and log in again and re-run the script to continue."
+    sleep 5
+    read -r -p "Press Enter to log out now..." </dev/tty
     sudo pkill -KILL -u "$USER"
     exit 0
 fi
