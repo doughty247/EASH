@@ -4,6 +4,28 @@ set -euo pipefail
 # Request sudo permission upfront.
 sudo -v
 
+# Check if Docker is installed and functioning; if not, force reinstall.
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    echo "Docker is not installed or not functioning correctly. Reinstalling Docker..."
+    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
+    sudo dnf -y install dnf-plugins-core
+    FEDORA_VERSION=$(rpm -E %fedora)
+    sudo tee /etc/yum.repos.d/docker-ce.repo >/dev/null <<EOF
+[docker-ce-stable]
+name=Docker CE Stable - \$basearch
+baseurl=https://download.docker.com/linux/fedora/${FEDORA_VERSION}/\$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/fedora/gpg
+EOF
+    sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    echo "Docker reinstalled successfully."
+else
+    echo "Docker is installed and functioning correctly."
+fi
+
 # Export PROMPT_START to avoid unbound variable errors.
 export PROMPT_START=""
 
@@ -113,8 +135,27 @@ for i in $(seq 1 $max_attempts); do
     fi
     sleep 5
 done
+
 if [ "$running" = false ]; then
-    echo "${RED}Warning: Nextcloud container did not start within 30 seconds.${RESET}"
+    echo "${RED}Nextcloud container did not start within 30 seconds. Forcing reinstallation...${RESET}"
+    docker compose down
+    docker compose up -d
+    sleep 10
+    running=false
+    for i in $(seq 1 $max_attempts); do
+        status=$(docker inspect --format="{{.State.Status}}" nextcloud_server 2>/dev/null || echo "unknown")
+        if [ "$status" = "running" ]; then
+            running=true
+            break
+        fi
+        sleep 5
+    done
+    if [ "$running" = false ]; then
+        echo "${RED}Nextcloud container still not running after forced reinstallation. Exiting.${RESET}"
+        exit 1
+    else
+        echo "${GREEN}Nextcloud container is now running after forced reinstallation.${RESET}"
+    fi
 else
     echo "${GREEN}Nextcloud container is running.${RESET}"
 fi
