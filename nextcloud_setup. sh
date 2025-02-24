@@ -64,7 +64,6 @@ else
     echo "${GREEN}MariaDB image found locally.${RESET}"
 fi
 
-# Check for Nextcloud working directory
 NEXTCLOUD_DIR="${HOME}/nextcloud"
 if [ ! -d "${NEXTCLOUD_DIR}" ]; then
     echo "${YELLOW}Nextcloud directory not found at ${NEXTCLOUD_DIR}. Creating directory...${RESET}"
@@ -74,7 +73,7 @@ else
 fi
 echo
 
-# Detect server IP (first IP from hostname -I)
+# Detect server IP
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo "${GREEN}Detected Server IP: ${SERVER_IP}${RESET}"
 echo
@@ -241,6 +240,15 @@ echo
 echo "${YELLOW}Ensuring CAN_INSTALL file exists in the Nextcloud config directory...${RESET}"
 docker exec -u www-data nextcloud_server bash -c 'if [ ! -f /var/www/html/config/CAN_INSTALL ]; then touch /var/www/html/config/CAN_INSTALL; fi'
 echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
+echo
+
+########################################
+# Backup Library Data from Container
+########################################
+echo "${YELLOW}Backing up Nextcloud library data from container...${RESET}"
+TIMESTAMP=$(date +%s)
+sudo docker cp nextcloud_server:/var/www/html "/tmp/nextcloud_library_backup_${TIMESTAMP}"
+echo "${GREEN}Library data backed up to /tmp/nextcloud_library_backup_${TIMESTAMP}.${RESET}"
 echo
 
 ########################################
