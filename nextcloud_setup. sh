@@ -127,8 +127,6 @@ if ! command -v firewall-cmd >/dev/null 2>&1; then
     echo "${YELLOW}Firewalld not found. Installing firewalld...${RESET}"
     sudo dnf install -y firewalld
 fi
-
-# Enable and start firewalld if not enabled.
 if ! systemctl is-enabled --quiet firewalld; then
     echo "${YELLOW}Firewalld is not enabled. Enabling and starting firewalld...${RESET}"
     sudo systemctl enable firewalld
@@ -164,6 +162,14 @@ else
         echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
     fi
 fi
+echo
+
+########################################
+# Create CAN_INSTALL File to Prevent Reinstallation Errors
+########################################
+echo "${YELLOW}Ensuring CAN_INSTALL file exists in the Nextcloud config directory...${RESET}"
+docker exec -u www-data nextcloud_server bash -c 'if [ ! -f /var/www/html/config/CAN_INSTALL ]; then touch /var/www/html/config/CAN_INSTALL; fi'
+echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
 echo
 
 ########################################
