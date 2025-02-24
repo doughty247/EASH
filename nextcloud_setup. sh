@@ -153,39 +153,20 @@ fi
 echo
 
 ########################################
-# Update Nextcloud Configuration Directly via PHP
+# Update Nextcloud Configuration Directly Using sed
 ########################################
 echo "${YELLOW}Updating Nextcloud configuration (trusted_domains and overwrite.cli.url)...${RESET}"
-# Execute a PHP snippet inside the container to update the configuration.
-php_code=$(cat <<'EOF'
-if (file_exists('/var/www/html/config/config.php')) {
-    include '/var/www/html/config/config.php';
-    if (!isset($CONFIG) || !is_array($CONFIG)) {
-        $CONFIG = array();
-    }
-    if (!isset($CONFIG['trusted_domains']) || !is_array($CONFIG['trusted_domains'])) {
-        $CONFIG['trusted_domains'] = array();
-    }
-    $found = false;
-    foreach ($CONFIG['trusted_domains'] as $domain) {
-        if ($domain === getenv('SERVER_IP')) {
-            $found = true;
-            break;
-        }
-    }
-    if (!$found) {
-        $CONFIG['trusted_domains'][] = getenv('SERVER_IP');
-    }
-    $CONFIG['overwrite.cli.url'] = "http://" . getenv('SERVER_IP') . ":8080";
-    file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
-    echo "Configuration updated.";
-} else {
-    echo "Config file not found.";
-}
-EOF
-)
-docker exec -e SERVER_IP="${SERVER_IP}" -u www-data nextcloud_server php -r "$php_code"
-echo
+# Check if the config file exists inside the container.
+if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
+    # If SERVER_IP is not already in the trusted_domains array, insert it before the closing parenthesis.
+    docker exec -u www-data nextcloud_server grep -q "${SERVER_IP}" /var/www/html/config/config.php || \
+      docker exec -u www-data nextcloud_server sed -i "/'trusted_domains' => array (/,/),/ { /),/ i\    '${SERVER_IP}'," /var/www/html/config/config.php
+    # Update overwrite.cli.url.
+    docker exec -u www-data nextcloud_server sed -i "s/'overwrite.cli.url' => '.*',/'overwrite.cli.url' => 'http:\/\/${SERVER_IP}:8080',/" /var/www/html/config/config.php
+    echo "${GREEN}Configuration updated.${RESET}"
+else
+    echo "${RED}Config file not found. Cannot update configuration.${RESET}"
+fi
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
 docker restart nextcloud_server
 echo
