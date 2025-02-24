@@ -176,19 +176,23 @@ echo
 # Update Database Configuration if SQLite Detected
 ########################################
 echo "${YELLOW}Checking database configuration...${RESET}"
-if docker exec -u www-data nextcloud_server grep -q "'dbtype' => 'sqlite'" /var/www/html/config/config.php; then
-    echo "${YELLOW}SQLite detected as database backend. Updating to MariaDB configuration..."
-    docker exec -u www-data nextcloud_server sed -i "s/'dbtype' => 'sqlite'/'dbtype' => 'mysql'/" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbhost' => '.*',/'dbhost' => 'db',/" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbname' => '.*',/'dbname' => 'nextcloud',/" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbuser' => '.*',/'dbuser' => 'nextcloud',/" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbpassword' => '.*',/'dbpassword' => 'nextcloud_password',/" /var/www/html/config/config.php
-    echo "${GREEN}Database configuration updated to use MariaDB.${RESET}"
-else
-    echo "${GREEN}Database configuration is already set to use a recommended backend.${RESET}"
-fi
+php_db=$(cat <<'EOF'
+$config = include '/var/www/html/config/config.php';
+if (isset($config['dbtype']) && $config['dbtype'] === 'sqlite') {
+    $config['dbtype'] = 'mysql';
+    $config['dbhost'] = 'db';
+    $config['dbname'] = 'nextcloud';
+    $config['dbuser'] = 'nextcloud';
+    $config['dbpassword'] = 'nextcloud_password';
+    file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($config, true) . ";");
+    echo "Database configuration updated to use MariaDB.";
+} else {
+    echo "Database configuration is already set to a recommended backend.";
+}
+EOF
+)
+docker exec -u www-data nextcloud_server php -r "$php_db"
 echo
-
 ########################################
 # Update Nextcloud Configuration via sed
 ########################################
