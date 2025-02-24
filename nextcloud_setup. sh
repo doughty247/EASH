@@ -149,11 +149,12 @@ fi
 echo
 
 ########################################
-# Check if Nextcloud is Installed and Install if Necessary
+# Check if Nextcloud is Installed
 ########################################
 echo "${YELLOW}Checking if Nextcloud is installed...${RESET}"
-installed=$(docker exec -u www-data nextcloud_server php occ status 2>/dev/null | grep -o "installed: true" || true)
-if [ "$installed" != "installed: true" ]; then
+if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
+    echo "${GREEN}Nextcloud is already installed; skipping maintenance:install.${RESET}"
+else
     echo "${YELLOW}Nextcloud is not installed. Running occ maintenance:install...${RESET}"
     docker exec -u www-data nextcloud_server php occ maintenance:install \
         --database "mysql" \
