@@ -243,25 +243,20 @@ echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
 echo
 
 ########################################
-# Force Database Configuration to Use MariaDB via PHP
+# Force Database Configuration to Use MariaDB via sed
 ########################################
 echo "${YELLOW}Forcing Nextcloud to use MariaDB as the database backend...${RESET}"
-php_db=$(cat <<'EOF'
-require '/var/www/html/config/config.php';
-$CONFIG['dbtype'] = 'mysql';
-$CONFIG['dbhost'] = 'db';
-$CONFIG['dbport'] = '3306';
-$CONFIG['dbname'] = 'nextcloud';
-$CONFIG['dbuser'] = 'nextcloud';
-$CONFIG['dbpassword'] = 'nextcloud_password';
-if (isset($CONFIG['dbsocket'])) {
-    unset($CONFIG['dbsocket']);
-}
-file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
-echo "Database configuration forced to use MariaDB.";
-EOF
-)
-docker exec -u www-data nextcloud_server php -r "$php_db"
+if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
+    docker exec -u www-data nextcloud_server sed -i "s/'dbtype' => 'sqlite'/'dbtype' => 'mysql'/g" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbhost' => '.*',/'dbhost' => 'db',/g" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbname' => '.*',/'dbname' => 'nextcloud',/g" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbuser' => '.*',/'dbuser' => 'nextcloud',/g" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbpassword' => '.*',/'dbpassword' => 'nextcloud_password',/g" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "/'dbsocket'/d" /var/www/html/config/config.php
+    echo "${GREEN}Database configuration forced to use MariaDB via sed.${RESET}"
+else
+    echo "${RED}Config file not found. Cannot update database configuration.${RESET}"
+fi
 echo
 
 ########################################
