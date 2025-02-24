@@ -165,7 +165,7 @@ echo
 ########################################
 echo "${YELLOW}Updating Nextcloud configuration (trusted_domains and overwrite.cli.url)...${RESET}"
 if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
-    # Append SERVER_IP to trusted_domains if not already present.
+    # Insert SERVER_IP into trusted_domains if not already present.
     docker exec -u www-data nextcloud_server sed -i "#'trusted_domains' => array (# a\    '${SERVER_IP}'," /var/www/html/config/config.php
     # Update the overwrite.cli.url setting.
     docker exec -u www-data nextcloud_server sed -i "s#'overwrite.cli.url' => '.*',#'overwrite.cli.url' => 'http://${SERVER_IP}:8080',#" /var/www/html/config/config.php
