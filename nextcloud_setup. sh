@@ -149,18 +149,19 @@ fi
 echo
 
 ########################################
-# Automate Updating Trusted Domains Using occ
+# Update Trusted Domains and Overwrite CLI URL Using occ
 ########################################
-echo "${YELLOW}Updating Nextcloud trusted domains configuration using occ...${RESET}"
-# Use the occ command to update trusted_domains safely.
+echo "${YELLOW}Updating Nextcloud configuration using occ...${RESET}"
+# Set the trusted domain and overwrite.cli.url using occ.
 docker exec -u www-data nextcloud_server php occ config:system:set trusted_domains 1 --value="${SERVER_IP}"
-echo "${GREEN}Trusted domains updated.${RESET}"
+docker exec -u www-data nextcloud_server php occ config:system:set overwrite.cli.url --value="http://${SERVER_IP}:8080"
+echo "${GREEN}Configuration updated using occ.${RESET}"
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
 docker restart nextcloud_server
 echo
 
 ########################################
-# Final Status Report with QR Code
+# Final Status Report with Dynamic QR Code
 ########################################
 echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
 echo "Nextcloud is deployed and running on port 8080."
@@ -169,7 +170,6 @@ echo
 
 # Determine terminal width and calculate scale for the QR code.
 TERM_COLS=$(tput cols)
-# For a version 1 QR code, assume a base width of 21 modules.
 scale=$(( (TERM_COLS - 2) / 21 ))
 if [ "$scale" -lt 1 ]; then
     scale=1
