@@ -144,17 +144,31 @@ fi
 echo
 
 ########################################
+# Automate Updating Trusted Domains in Nextcloud
+########################################
+echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
+# Run a PHP snippet inside the Nextcloud container that reads config.php, updates the trusted_domains array, and writes it back.
+docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "\
+\$config = include '/var/www/html/config/config.php'; \
+if (!in_array(getenv('SERVER_IP'), \$config['trusted_domains'])) { \
+    \$config['trusted_domains'][] = getenv('SERVER_IP'); \
+    file_put_contents('/var/www/html/config/config.php', '<?php\n\$CONFIG = ' . var_export(\$config, true) . ';'); \
+    echo 'Trusted domains updated.'; \
+} else { \
+    echo 'Server IP already present in trusted domains.'; \
+}"
+echo
+echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
+docker restart nextcloud_server
+echo
+
+########################################
 # Final Status Report with QR Code
 ########################################
 echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
 echo "Nextcloud is deployed and running on port 8080."
 echo "Access it via http://${SERVER_IP}:8080"
-
-# Ensure qrencode is installed.
-if ! command -v qrencode &>/dev/null; then
-    echo "${YELLOW}qrencode not found. Installing qrencode...${RESET}"
-    sudo dnf install -y qrencode
-fi
+echo
 
 echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
 # Print a larger QR code in terminal using ANSI UTF8 output with scale 2.
