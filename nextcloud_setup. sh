@@ -173,22 +173,18 @@ echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
 echo
 
 ########################################
-# Update Database Configuration if SQLite Detected via PHP
+# Force Database Configuration to Use MariaDB via PHP
 ########################################
-echo "${YELLOW}Checking and updating database configuration if necessary...${RESET}"
+echo "${YELLOW}Forcing Nextcloud to use MariaDB as the database backend...${RESET}"
 php_db=$(cat <<'EOF'
 require '/var/www/html/config/config.php';
-if (isset($CONFIG['dbtype']) && $CONFIG['dbtype'] === 'sqlite') {
-    $CONFIG['dbtype'] = 'mysql';
-    $CONFIG['dbhost'] = 'db';
-    $CONFIG['dbname'] = 'nextcloud';
-    $CONFIG['dbuser'] = 'nextcloud';
-    $CONFIG['dbpassword'] = 'nextcloud_password';
-    file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
-    echo "Database configuration updated to use MariaDB.";
-} else {
-    echo "Database configuration is already set to a recommended backend.";
-}
+$CONFIG['dbtype'] = 'mysql';
+$CONFIG['dbhost'] = 'db';
+$CONFIG['dbname'] = 'nextcloud';
+$CONFIG['dbuser'] = 'nextcloud';
+$CONFIG['dbpassword'] = 'nextcloud_password';
+file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
+echo "Database configuration forced to use MariaDB.";
 EOF
 )
 docker exec -u www-data nextcloud_server php -r "$php_db"
