@@ -88,6 +88,7 @@ volumes:
   nextcloud_data:
   nextcloud_db:
 EOF
+
     echo "${YELLOW}Starting Nextcloud container...${RESET}"
     docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Nextcloud deployed successfully.${RESET}"
@@ -118,6 +119,18 @@ fi
 echo
 
 ########################################
+# Ensure Firewalld is Installed and Running
+########################################
+if ! command -v firewall-cmd >/dev/null 2>&1; then
+    echo "${YELLOW}Firewalld not found. Installing firewalld...${RESET}"
+    sudo dnf install -y firewalld
+    sudo systemctl enable --now firewalld
+elif ! systemctl is-active --quiet firewalld; then
+    echo "${YELLOW}Firewalld is not running. Starting firewalld...${RESET}"
+    sudo systemctl enable --now firewalld
+fi
+
+########################################
 # Advanced Network Accessibility Check
 ########################################
 echo "${YELLOW}Checking network accessibility on port 8080...${RESET}"
@@ -126,19 +139,15 @@ if [ "$HTTP_CODE" -eq 200 ]; then
     echo "${GREEN}Nextcloud is accessible on port 8080.${RESET}"
 else
     echo "${RED}Nextcloud did not return a 200 OK on port 8080 (HTTP code: $HTTP_CODE).${RESET}"
-    if systemctl is-active --quiet firewalld; then
-        echo "${YELLOW}Firewalld is active. Attempting to open port 8080...${RESET}"
-        sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
-        sudo firewall-cmd --reload
-        sleep 5
-        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
-        if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "${GREEN}Port 8080 is now accessible after updating firewall rules.${RESET}"
-        else
-            echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
-        fi
+    echo "${YELLOW}Attempting to open port 8080 via firewalld...${RESET}"
+    sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
+    sudo firewall-cmd --reload
+    sleep 5
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
+    if [ "$HTTP_CODE" -eq 200 ]; then
+        echo "${GREEN}Port 8080 is now accessible after updating firewall rules.${RESET}"
     else
-        echo "${YELLOW}Firewalld is not active. If you are using another firewall, ensure port 8080 is open.${RESET}"
+        echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
     fi
 fi
 echo
@@ -147,11 +156,13 @@ echo
 # Update Nextcloud Configuration Directly via PHP
 ########################################
 echo "${YELLOW}Updating Nextcloud configuration (trusted_domains and overwrite.cli.url)...${RESET}"
-
-# Define PHP code to update config.php manually.
+# Execute a PHP snippet inside the container to update the configuration.
 php_code=$(cat <<'EOF'
 if (file_exists('/var/www/html/config/config.php')) {
-    $CONFIG = include '/var/www/html/config/config.php';
+    include '/var/www/html/config/config.php';
+    if (!isset($CONFIG) || !is_array($CONFIG)) {
+        $CONFIG = array();
+    }
     if (!isset($CONFIG['trusted_domains']) || !is_array($CONFIG['trusted_domains'])) {
         $CONFIG['trusted_domains'] = array();
     }
@@ -187,7 +198,6 @@ echo "Nextcloud is deployed and running on port 8080."
 echo "Access it via http://${SERVER_IP}:8080"
 echo
 
-# Determine terminal width and calculate scale for the QR code.
 TERM_COLS=$(tput cols)
 scale=$(( (TERM_COLS - 2) / 21 ))
 if [ "$scale" -lt 1 ]; then scale=1; fi
