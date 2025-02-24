@@ -153,7 +153,7 @@ echo
 ########################################
 echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
 
-# Prepare PHP code to update trusted domains.
+# Store PHP code in a variable using a here-document
 php_code=$(cat <<'EOF'
 if (file_exists('/var/www/html/config/config.php')) {
     $CONFIG = include '/var/www/html/config/config.php';
@@ -165,7 +165,7 @@ if (file_exists('/var/www/html/config/config.php')) {
     }
     if (!in_array(getenv('SERVER_IP'), $CONFIG['trusted_domains'])) {
         $CONFIG['trusted_domains'][] = getenv('SERVER_IP');
-        file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
+        file_put_contents('/var/www/html/config/config.php', '<?php $CONFIG = ' . var_export($CONFIG, true) . ';');
         echo 'Trusted domains updated.';
     } else {
         echo 'Server IP already present in trusted domains.';
