@@ -80,7 +80,7 @@ services:
     image: mariadb:latest
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: nextcloud_root_password
+      MYSQL_ROOT_PASSWORD=nextcloud_root_password
       MYSQL_DATABASE=nextcloud
       MYSQL_USER=nextcloud
       MYSQL_PASSWORD=nextcloud_password
@@ -170,6 +170,23 @@ echo
 echo "${YELLOW}Ensuring CAN_INSTALL file exists in the Nextcloud config directory...${RESET}"
 docker exec -u www-data nextcloud_server bash -c 'if [ ! -f /var/www/html/config/CAN_INSTALL ]; then touch /var/www/html/config/CAN_INSTALL; fi'
 echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
+echo
+
+########################################
+# Update Database Configuration if SQLite Detected
+########################################
+echo "${YELLOW}Checking database configuration...${RESET}"
+if docker exec -u www-data nextcloud_server grep -q "'dbtype' => 'sqlite'" /var/www/html/config/config.php; then
+    echo "${YELLOW}SQLite detected as database backend. Updating to MariaDB configuration..."
+    docker exec -u www-data nextcloud_server sed -i "s/'dbtype' => 'sqlite'/'dbtype' => 'mysql'/" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbhost' => '.*',/'dbhost' => 'db',/" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbname' => '.*',/'dbname' => 'nextcloud',/" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbuser' => '.*',/'dbuser' => 'nextcloud',/" /var/www/html/config/config.php
+    docker exec -u www-data nextcloud_server sed -i "s/'dbpassword' => '.*',/'dbpassword' => 'nextcloud_password',/" /var/www/html/config/config.php
+    echo "${GREEN}Database configuration updated to use MariaDB.${RESET}"
+else
+    echo "${GREEN}Database configuration is already set to use a recommended backend.${RESET}"
+fi
 echo
 
 ########################################
