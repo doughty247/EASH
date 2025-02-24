@@ -18,6 +18,11 @@ RESET=$(tput sgr0)
 exec > >(tee /tmp/nextcloud_setup_summary.txt) 2>&1
 clear
 
+# Detect server IP (first IP from hostname -I)
+SERVER_IP=$(hostname -I | awk '{print $1}')
+echo "${GREEN}Detected Server IP: ${SERVER_IP}${RESET}"
+echo
+
 echo "${GREEN}Starting Nextcloud Setup...${RESET}"
 echo
 
@@ -113,8 +118,17 @@ fi
 echo
 
 ########################################
-# Final Status Report
+# Final Status Report with QR Code
 ########################################
 echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
 echo "Nextcloud is deployed and running on port 8080."
-echo "Access it via http://<your-server-ip>:8080"
+echo "Access it via http://${SERVER_IP}:8080"
+
+# Ensure qrencode is installed.
+if ! command -v qrencode &>/dev/null; then
+    echo "${YELLOW}qrencode not found. Installing qrencode...${RESET}"
+    sudo dnf install -y qrencode
+fi
+
+echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
+qrencode -t ANSIUTF8 "http://${SERVER_IP}:8080"
