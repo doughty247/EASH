@@ -184,6 +184,9 @@ $CONFIG['dbport'] = '3306';
 $CONFIG['dbname'] = 'nextcloud';
 $CONFIG['dbuser'] = 'nextcloud';
 $CONFIG['dbpassword'] = 'nextcloud_password';
+if (isset($CONFIG['dbsocket'])) {
+    unset($CONFIG['dbsocket']);
+}
 file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
 echo "Database configuration forced to use MariaDB.";
 EOF
