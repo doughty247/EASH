@@ -43,6 +43,37 @@ RESET=$(tput sgr0)
 exec > >(tee /tmp/nextcloud_setup_summary.txt) 2>&1
 clear
 
+########################################
+# Pre-Checks: Docker Images and Nextcloud Directory
+########################################
+echo "${YELLOW}Performing pre-checks...${RESET}"
+
+# Check for Nextcloud image
+if ! docker images nextcloud:latest --format "{{.Repository}}" | grep -q nextcloud; then
+    echo "${YELLOW}Nextcloud image not found locally. Pulling nextcloud:latest...${RESET}"
+    docker pull nextcloud:latest
+else
+    echo "${GREEN}Nextcloud image found locally.${RESET}"
+fi
+
+# Check for MariaDB image
+if ! docker images mariadb:latest --format "{{.Repository}}" | grep -q mariadb; then
+    echo "${YELLOW}MariaDB image not found locally. Pulling mariadb:latest...${RESET}"
+    docker pull mariadb:latest
+else
+    echo "${GREEN}MariaDB image found locally.${RESET}"
+fi
+
+# Check for Nextcloud working directory
+NEXTCLOUD_DIR="${HOME}/nextcloud"
+if [ ! -d "${NEXTCLOUD_DIR}" ]; then
+    echo "${YELLOW}Nextcloud directory not found at ${NEXTCLOUD_DIR}. Creating directory...${RESET}"
+    mkdir -p "${NEXTCLOUD_DIR}"
+else
+    echo "${GREEN}Nextcloud directory exists at ${NEXTCLOUD_DIR}.${RESET}"
+fi
+echo
+
 # Detect server IP (first IP from hostname -I)
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo "${GREEN}Detected Server IP: ${SERVER_IP}${RESET}"
@@ -54,13 +85,13 @@ echo
 ########################################
 # Restore Nextcloud Backup if Available
 ########################################
-if [ ! -d "./nextcloud/html" ]; then
+if [ ! -d "${NEXTCLOUD_DIR}/html" ]; then
     echo "${YELLOW}No Nextcloud data directory found. Checking for backups...${RESET}"
     found_backup=false
     for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
         if [ -d "$b" ]; then
-            echo "${YELLOW}Restoring backup directory '$b' to ./nextcloud/html...${RESET}"
-            mv "$b" "./nextcloud/html"
+            echo "${YELLOW}Restoring backup directory '$b' to ${NEXTCLOUD_DIR}/html...${RESET}"
+            mv "$b" "${NEXTCLOUD_DIR}/html"
             found_backup=true
             break
         fi
@@ -74,9 +105,9 @@ echo
 ########################################
 # Nextcloud Deployment via Docker Compose
 ########################################
+cd "${NEXTCLOUD_DIR}"
 if ! docker ps -a --filter=name=nextcloud_server | grep -q nextcloud_server; then
     echo "${YELLOW}Deploying Nextcloud using Docker Compose...${RESET}"
-    mkdir -p ~/nextcloud && cd ~/nextcloud || exit 1
     cat > docker-compose.yml <<'EOF'
 version: '3.7'
 
@@ -135,7 +166,6 @@ for i in $(seq 1 $max_attempts); do
     fi
     sleep 5
 done
-
 if [ "$running" = false ]; then
     echo "${RED}Nextcloud container did not start within 30 seconds. Forcing reinstallation...${RESET}"
     docker compose down
