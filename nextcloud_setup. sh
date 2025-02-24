@@ -191,5 +191,5 @@ echo "Access it via http://${SERVER_IP}:8080"
 echo
 
 echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
-# Print a larger QR code in terminal using ANSI UTF8 output with scale 2.
-qrencode -t ANSIUTF8 -s 2 "http://${SERVER_IP}:8080"
+# Print a larger QR code in terminal using ANSI UTF8 output with scale 4.
+qrencode -t ANSIUTF8 -s 4 "http://${SERVER_IP}:8080"
