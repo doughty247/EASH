@@ -152,25 +152,31 @@ echo
 # Automate Updating Trusted Domains in Nextcloud
 ########################################
 echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
-docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "\
-if (file_exists('/var/www/html/config/config.php')) { \
-    \$CONFIG = include '/var/www/html/config/config.php'; \
-    if (!isset(\$CONFIG) || !is_array(\$CONFIG)) { \
-        \$CONFIG = array(); \
-    } \
-    if (!isset(\$CONFIG['trusted_domains']) || !is_array(\$CONFIG['trusted_domains'])) { \
-        \$CONFIG['trusted_domains'] = array(); \
-    } \
-    if (!in_array(getenv('SERVER_IP'), \$CONFIG['trusted_domains'])) { \
-        \$CONFIG['trusted_domains'][] = getenv('SERVER_IP'); \
-        file_put_contents('/var/www/html/config/config.php', \"<?php\\n\\\$CONFIG = \" . var_export(\$CONFIG, true) . \";\"); \
-        echo 'Trusted domains updated.'; \
-    } else { \
-        echo 'Server IP already present in trusted domains.'; \
-    } \
-} else { \
-    echo 'Config file not found.'; \
-}"
+
+# Prepare PHP code to update trusted domains.
+php_code=$(cat <<'EOF'
+if (file_exists('/var/www/html/config/config.php')) {
+    $CONFIG = include '/var/www/html/config/config.php';
+    if (!isset($CONFIG) || !is_array($CONFIG)) {
+        $CONFIG = array();
+    }
+    if (!isset($CONFIG['trusted_domains']) || !is_array($CONFIG['trusted_domains'])) {
+        $CONFIG['trusted_domains'] = array();
+    }
+    if (!in_array(getenv('SERVER_IP'), $CONFIG['trusted_domains'])) {
+        $CONFIG['trusted_domains'][] = getenv('SERVER_IP');
+        file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
+        echo 'Trusted domains updated.';
+    } else {
+        echo 'Server IP already present in trusted domains.';
+    }
+} else {
+    echo 'Config file not found.';
+}
+EOF
+)
+
+docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "$php_code"
 echo
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
 docker restart nextcloud_server
