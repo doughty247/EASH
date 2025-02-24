@@ -67,6 +67,11 @@ services:
       - 8080:80
     volumes:
       - nextcloud_data:/var/www/html
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud_password
     depends_on:
       - db
 
@@ -148,16 +153,20 @@ echo
 ########################################
 echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
 docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "\
-include '/var/www/html/config/config.php'; \
-if (!isset(\$CONFIG['trusted_domains']) || !is_array(\$CONFIG['trusted_domains'])) { \
-    \$CONFIG['trusted_domains'] = array(); \
-} \
-if (!in_array(getenv('SERVER_IP'), \$CONFIG['trusted_domains'])) { \
-    \$CONFIG['trusted_domains'][] = getenv('SERVER_IP'); \
-    file_put_contents('/var/www/html/config/config.php', '<?php\n\$CONFIG = ' . var_export(\$CONFIG, true) . ';'); \
-    echo 'Trusted domains updated.'; \
+if (file_exists('/var/www/html/config/config.php')) { \
+    \$config = include '/var/www/html/config/config.php'; \
+    if (!isset(\$config['trusted_domains']) || !is_array(\$config['trusted_domains'])) { \
+        \$config['trusted_domains'] = array(); \
+    } \
+    if (!in_array(getenv('SERVER_IP'), \$config['trusted_domains'])) { \
+        \$config['trusted_domains'][] = getenv('SERVER_IP'); \
+        file_put_contents('/var/www/html/config/config.php', '<?php\n\$CONFIG = ' . var_export(\$config, true) . ';'); \
+        echo 'Trusted domains updated.'; \
+    } else { \
+        echo 'Server IP already present in trusted domains.'; \
+    } \
 } else { \
-    echo 'Server IP already present in trusted domains.'; \
+    echo 'Config file not found.'; \
 }"
 echo
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
