@@ -149,10 +149,28 @@ fi
 echo
 
 ########################################
+# Check if Nextcloud is Installed and Install if Necessary
+########################################
+echo "${YELLOW}Checking if Nextcloud is installed...${RESET}"
+installed=$(docker exec -u www-data nextcloud_server php occ status 2>/dev/null | grep -o "installed: true" || true)
+if [ "$installed" != "installed: true" ]; then
+    echo "${YELLOW}Nextcloud is not installed. Running occ maintenance:install...${RESET}"
+    docker exec -u www-data nextcloud_server php occ maintenance:install \
+        --database "mysql" \
+        --database-host "db" \
+        --database-name "nextcloud" \
+        --database-user "nextcloud" \
+        --database-pass "nextcloud_password" \
+        --admin-user "admin" \
+        --admin-pass "admin_password" \
+        --admin-email "admin@example.com"
+fi
+echo
+
+########################################
 # Update Trusted Domains and Overwrite CLI URL Using occ
 ########################################
 echo "${YELLOW}Updating Nextcloud configuration using occ...${RESET}"
-# Set the trusted domain and overwrite.cli.url using occ.
 docker exec -u www-data nextcloud_server php occ config:system:set trusted_domains 1 --value="${SERVER_IP}"
 docker exec -u www-data nextcloud_server php occ config:system:set overwrite.cli.url --value="http://${SERVER_IP}:8080"
 echo "${GREEN}Configuration updated using occ.${RESET}"
