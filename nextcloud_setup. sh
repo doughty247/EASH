@@ -180,6 +180,7 @@ php_db=$(cat <<'EOF'
 require '/var/www/html/config/config.php';
 $CONFIG['dbtype'] = 'mysql';
 $CONFIG['dbhost'] = 'db';
+$CONFIG['dbport'] = '3306';
 $CONFIG['dbname'] = 'nextcloud';
 $CONFIG['dbuser'] = 'nextcloud';
 $CONFIG['dbpassword'] = 'nextcloud_password';
