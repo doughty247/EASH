@@ -149,41 +149,18 @@ fi
 echo
 
 ########################################
-# Automate Updating Trusted Domains in Nextcloud
+# Automate Updating Trusted Domains Using occ
 ########################################
-echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
-
-# Store PHP code in a variable using a here-document
-php_code=$(cat <<'EOF'
-if (file_exists('/var/www/html/config/config.php')) {
-    $CONFIG = include '/var/www/html/config/config.php';
-    if (!isset($CONFIG) || !is_array($CONFIG)) {
-        $CONFIG = array();
-    }
-    if (!isset($CONFIG['trusted_domains']) || !is_array($CONFIG['trusted_domains'])) {
-        $CONFIG['trusted_domains'] = array();
-    }
-    if (!in_array(getenv('SERVER_IP'), $CONFIG['trusted_domains'])) {
-        $CONFIG['trusted_domains'][] = getenv('SERVER_IP');
-        file_put_contents('/var/www/html/config/config.php', '<?php $CONFIG = ' . var_export($CONFIG, true) . ';');
-        echo 'Trusted domains updated.';
-    } else {
-        echo 'Server IP already present in trusted domains.';
-    }
-} else {
-    echo 'Config file not found.';
-}
-EOF
-)
-
-docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "$php_code"
-echo
+echo "${YELLOW}Updating Nextcloud trusted domains configuration using occ...${RESET}"
+# Use the occ command to update trusted_domains safely.
+docker exec -u www-data nextcloud_server php occ config:system:set trusted_domains 1 --value="${SERVER_IP}"
+echo "${GREEN}Trusted domains updated.${RESET}"
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
 docker restart nextcloud_server
 echo
 
 ########################################
-# Final Status Report with QR Code
+# Final Status Report with Dynamic QR Code
 ########################################
 echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
 echo "Nextcloud is deployed and running on port 8080."
@@ -193,13 +170,12 @@ echo
 echo "${GREEN}Generating QR code for Nextcloud URL...${RESET}"
 # Determine terminal width and calculate scale for the QR code.
 TERM_COLS=$(tput cols)
-# Assume a base QR code width of 21 modules for a version 1 QR code.
-# Calculate scale such that: (21 * scale) + margin <= TERM_COLS, with margin = 2.
+# For a version 1 QR code, assume a base width of 21 modules.
+# We'll use: scale = floor((TERM_COLS - 2) / 21)
 scale=$(( (TERM_COLS - 2) / 21 ))
 if [ "$scale" -lt 1 ]; then
     scale=1
 fi
-# Optionally limit maximum scale.
 if [ "$scale" -gt 10 ]; then
     scale=10
 fi
