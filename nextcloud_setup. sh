@@ -190,6 +190,19 @@ echo "Nextcloud is deployed and running on port 8080."
 echo "Access it via http://${SERVER_IP}:8080"
 echo
 
-echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
-# Print a larger QR code in terminal using ANSI UTF8 output with scale 4.
-qrencode -t ANSIUTF8 -s 4 "http://${SERVER_IP}:8080"
+echo "${GREEN}Generating QR code for Nextcloud URL...${RESET}"
+# Determine terminal width and calculate scale for the QR code.
+TERM_COLS=$(tput cols)
+# Assume a base QR code width of 21 modules for a version 1 QR code.
+# Calculate scale such that: (21 * scale) + margin <= TERM_COLS, with margin = 2.
+scale=$(( (TERM_COLS - 2) / 21 ))
+if [ "$scale" -lt 1 ]; then
+    scale=1
+fi
+# Optionally limit maximum scale.
+if [ "$scale" -gt 10 ]; then
+    scale=10
+fi
+
+echo "${GREEN}Using scale factor: $scale${RESET}"
+qrencode -t ANSIUTF8 -l H -s "$scale" "http://${SERVER_IP}:8080"
