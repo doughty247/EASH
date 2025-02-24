@@ -29,7 +29,6 @@ echo
 ########################################
 # Restore Nextcloud Backup if Available
 ########################################
-# Assumes Nextcloud web data should reside in ./nextcloud/html
 if [ ! -d "./nextcloud/html" ]; then
     echo "${YELLOW}No Nextcloud data directory found. Checking for backups...${RESET}"
     found_backup=false
@@ -53,8 +52,6 @@ echo
 if ! docker ps -a --filter=name=nextcloud_server | grep -q nextcloud_server; then
     echo "${YELLOW}Deploying Nextcloud using Docker Compose...${RESET}"
     mkdir -p ~/nextcloud && cd ~/nextcloud || exit 1
-
-    # Create docker-compose.yml for Nextcloud with a MariaDB backend.
     cat > docker-compose.yml <<'EOF'
 version: '3.7'
 
@@ -91,7 +88,6 @@ volumes:
   nextcloud_data:
   nextcloud_db:
 EOF
-
     echo "${YELLOW}Starting Nextcloud container...${RESET}"
     docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
     echo "${GREEN}Nextcloud deployed successfully.${RESET}"
@@ -114,7 +110,6 @@ for i in $(seq 1 $max_attempts); do
     fi
     sleep 5
 done
-
 if [ "$running" = false ]; then
     echo "${RED}Warning: Nextcloud container did not start within 30 seconds.${RESET}"
 else
@@ -149,32 +144,37 @@ fi
 echo
 
 ########################################
-# Check if Nextcloud is Installed
+# Update Nextcloud Configuration Directly via PHP
 ########################################
-echo "${YELLOW}Checking if Nextcloud is installed...${RESET}"
-if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
-    echo "${GREEN}Nextcloud is already installed; skipping maintenance:install.${RESET}"
-else
-    echo "${YELLOW}Nextcloud is not installed. Running occ maintenance:install...${RESET}"
-    docker exec -u www-data nextcloud_server php occ maintenance:install \
-        --database "mysql" \
-        --database-host "db" \
-        --database-name "nextcloud" \
-        --database-user "nextcloud" \
-        --database-pass "nextcloud_password" \
-        --admin-user "admin" \
-        --admin-pass "admin_password" \
-        --admin-email "admin@example.com"
-fi
-echo
+echo "${YELLOW}Updating Nextcloud configuration (trusted_domains and overwrite.cli.url)...${RESET}"
 
-########################################
-# Update Trusted Domains and Overwrite CLI URL Using occ
-########################################
-echo "${YELLOW}Updating Nextcloud configuration using occ...${RESET}"
-docker exec -u www-data nextcloud_server php occ config:system:set trusted_domains 1 --value="${SERVER_IP}"
-docker exec -u www-data nextcloud_server php occ config:system:set overwrite.cli.url --value="http://${SERVER_IP}:8080"
-echo "${GREEN}Configuration updated using occ.${RESET}"
+# Define PHP code to update config.php manually.
+php_code=$(cat <<'EOF'
+if (file_exists('/var/www/html/config/config.php')) {
+    $CONFIG = include '/var/www/html/config/config.php';
+    if (!isset($CONFIG['trusted_domains']) || !is_array($CONFIG['trusted_domains'])) {
+        $CONFIG['trusted_domains'] = array();
+    }
+    $found = false;
+    foreach ($CONFIG['trusted_domains'] as $domain) {
+        if ($domain === getenv('SERVER_IP')) {
+            $found = true;
+            break;
+        }
+    }
+    if (!$found) {
+        $CONFIG['trusted_domains'][] = getenv('SERVER_IP');
+    }
+    $CONFIG['overwrite.cli.url'] = "http://" . getenv('SERVER_IP') . ":8080";
+    file_put_contents('/var/www/html/config/config.php', "<?php\n\$CONFIG = " . var_export($CONFIG, true) . ";");
+    echo "Configuration updated.";
+} else {
+    echo "Config file not found.";
+}
+EOF
+)
+docker exec -e SERVER_IP="${SERVER_IP}" -u www-data nextcloud_server php -r "$php_code"
+echo
 echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
 docker restart nextcloud_server
 echo
@@ -190,12 +190,8 @@ echo
 # Determine terminal width and calculate scale for the QR code.
 TERM_COLS=$(tput cols)
 scale=$(( (TERM_COLS - 2) / 21 ))
-if [ "$scale" -lt 1 ]; then
-    scale=1
-fi
-if [ "$scale" -gt 10 ]; then
-    scale=10
-fi
+if [ "$scale" -lt 1 ]; then scale=1; fi
+if [ "$scale" -gt 10 ]; then scale=10; fi
 
 echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
 qrencode -t ANSIUTF8 -l H -s "$scale" "http://${SERVER_IP}:8080"
