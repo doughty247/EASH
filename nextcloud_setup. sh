@@ -118,6 +118,32 @@ fi
 echo
 
 ########################################
+# Advanced Network Accessibility Check
+########################################
+echo "${YELLOW}Checking network accessibility on port 8080...${RESET}"
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
+if [ "$HTTP_CODE" -eq 200 ]; then
+    echo "${GREEN}Nextcloud is accessible on port 8080.${RESET}"
+else
+    echo "${RED}Nextcloud did not return a 200 OK on port 8080 (HTTP code: $HTTP_CODE).${RESET}"
+    if systemctl is-active --quiet firewalld; then
+        echo "${YELLOW}Firewalld is active. Attempting to open port 8080...${RESET}"
+        sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
+        sudo firewall-cmd --reload
+        sleep 5
+        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
+        if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "${GREEN}Port 8080 is now accessible after updating firewall rules.${RESET}"
+        else
+            echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
+        fi
+    else
+        echo "${YELLOW}Firewalld is not active. If you are using another firewall, ensure port 8080 is open.${RESET}"
+    fi
+fi
+echo
+
+########################################
 # Final Status Report with QR Code
 ########################################
 echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
