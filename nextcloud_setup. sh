@@ -147,12 +147,14 @@ echo
 # Automate Updating Trusted Domains in Nextcloud
 ########################################
 echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
-# Run a PHP snippet inside the Nextcloud container that reads config.php, updates the trusted_domains array, and writes it back.
 docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "\
-\$config = include '/var/www/html/config/config.php'; \
-if (!in_array(getenv('SERVER_IP'), \$config['trusted_domains'])) { \
-    \$config['trusted_domains'][] = getenv('SERVER_IP'); \
-    file_put_contents('/var/www/html/config/config.php', '<?php\n\$CONFIG = ' . var_export(\$config, true) . ';'); \
+include '/var/www/html/config/config.php'; \
+if (!isset(\$CONFIG['trusted_domains']) || !is_array(\$CONFIG['trusted_domains'])) { \
+    \$CONFIG['trusted_domains'] = array(); \
+} \
+if (!in_array(getenv('SERVER_IP'), \$CONFIG['trusted_domains'])) { \
+    \$CONFIG['trusted_domains'][] = getenv('SERVER_IP'); \
+    file_put_contents('/var/www/html/config/config.php', '<?php\n\$CONFIG = ' . var_export(\$CONFIG, true) . ';'); \
     echo 'Trusted domains updated.'; \
 } else { \
     echo 'Server IP already present in trusted domains.'; \
