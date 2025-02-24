@@ -138,4 +138,52 @@ else
         sleep 5
         HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
         if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "${GREEN}Port 8080 is now accessible after updating firewall rule
+            echo "${GREEN}Port 8080 is now accessible after updating firewall rules.${RESET}"
+        else
+            echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
+        fi
+    else
+        echo "${YELLOW}Firewalld is not active. If you are using another firewall, ensure port 8080 is open.${RESET}"
+    fi
+fi
+echo
+
+########################################
+# Automate Updating Trusted Domains in Nextcloud
+########################################
+echo "${YELLOW}Updating Nextcloud trusted domains configuration...${RESET}"
+docker exec -e SERVER_IP="${SERVER_IP}" nextcloud_server php -r "\
+if (file_exists('/var/www/html/config/config.php')) { \
+    \$CONFIG = include '/var/www/html/config/config.php'; \
+    if (!isset(\$CONFIG) || !is_array(\$CONFIG)) { \
+        \$CONFIG = array(); \
+    } \
+    if (!isset(\$CONFIG['trusted_domains']) || !is_array(\$CONFIG['trusted_domains'])) { \
+        \$CONFIG['trusted_domains'] = array(); \
+    } \
+    if (!in_array(getenv('SERVER_IP'), \$CONFIG['trusted_domains'])) { \
+        \$CONFIG['trusted_domains'][] = getenv('SERVER_IP'); \
+        file_put_contents('/var/www/html/config/config.php', \"<?php\\n\\\$CONFIG = \" . var_export(\$CONFIG, true) . \";\"); \
+        echo 'Trusted domains updated.'; \
+    } else { \
+        echo 'Server IP already present in trusted domains.'; \
+    } \
+} else { \
+    echo 'Config file not found.'; \
+}"
+echo
+echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
+docker restart nextcloud_server
+echo
+
+########################################
+# Final Status Report with QR Code
+########################################
+echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
+echo "Nextcloud is deployed and running on port 8080."
+echo "Access it via http://${SERVER_IP}:8080"
+echo
+
+echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
+# Print a larger QR code in terminal using ANSI UTF8 output with scale 2.
+qrencode -t ANSIUTF8 -s 2 "http://${SERVER_IP}:8080"
