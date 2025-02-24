@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Export PROMPT_START to avoid unbound variable errors.
+export PROMPT_START=""
+
+########################################
+# ANSI Colors for Output
+########################################
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+RED=$(tput setaf 1)
+RESET=$(tput sgr0)
+
+########################################
+# Log Output
+########################################
+exec > >(tee /tmp/nextcloud_setup_summary.txt) 2>&1
+clear
+
+echo "${GREEN}Starting Nextcloud Setup...${RESET}"
+echo
+
+########################################
+# Restore Nextcloud Backup if Available
+########################################
+# Assumes Nextcloud web data should reside in ./nextcloud/html
+if [ ! -d "./nextcloud/html" ]; then
+    echo "${YELLOW}No Nextcloud data directory found. Checking for backups...${RESET}"
+    found_backup=false
+    for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
+        if [ -d "$b" ]; then
+            echo "${YELLOW}Restoring backup directory '$b' to ./nextcloud/html...${RESET}"
+            mv "$b" "./nextcloud/html"
+            found_backup=true
+            break
+        fi
+    done
+    if [ "$found_backup" = false ]; then
+        echo "${YELLOW}No backup found. Proceeding with a fresh installation.${RESET}"
+    fi
+fi
+echo
+
+########################################
+# Nextcloud Deployment via Docker Compose
+########################################
+if ! docker ps -a --filter=name=nextcloud_server | grep -q nextcloud_server; then
+    echo "${YELLOW}Deploying Nextcloud using Docker Compose...${RESET}"
+    mkdir -p ~/nextcloud && cd ~/nextcloud || exit 1
+
+    # Create docker-compose.yml for Nextcloud with a MariaDB backend.
+    cat > docker-compose.yml <<'EOF'
+version: '3.7'
+
+services:
+  nextcloud:
+    container_name: nextcloud_server
+    image: nextcloud:latest
+    restart: always
+    ports:
+      - 8080:80
+    volumes:
+      - nextcloud_data:/var/www/html
+    depends_on:
+      - db
+
+  db:
+    container_name: nextcloud_db
+    image: mariadb:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: nextcloud_root_password
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud_password
+    volumes:
+      - nextcloud_db:/var/lib/mysql
+
+volumes:
+  nextcloud_data:
+  nextcloud_db:
+EOF
+
+    echo "${YELLOW}Starting Nextcloud container...${RESET}"
+    docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
+    echo "${GREEN}Nextcloud deployed successfully.${RESET}"
+else
+    echo "${GREEN}Nextcloud container already exists; skipping deployment.${RESET}"
+fi
+echo
+
+########################################
+# Simple Health Check for Nextcloud Container
+########################################
+echo "${YELLOW}Waiting for Nextcloud container to start...${RESET}"
+max_attempts=6
+running=false
+for i in $(seq 1 $max_attempts); do
+    status=$(docker inspect --format="{{.State.Status}}" nextcloud_server 2>/dev/null || echo "unknown")
+    if [ "$status" = "running" ]; then
+        running=true
+        break
+    fi
+    sleep 5
+done
+
+if [ "$running" = false ]; then
+    echo "${RED}Warning: Nextcloud container did not start within 30 seconds.${RESET}"
+else
+    echo "${GREEN}Nextcloud container is running.${RESET}"
+fi
+echo
+
+########################################
+# Final Status Report
+########################################
+echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
+echo "Nextcloud is deployed and running on port 8080."
+echo "Access it via http://<your-server-ip>:8080"
