@@ -53,8 +53,7 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions
-# (Descriptions explain what each app does)
+# Define setup scripts and their descriptions (what each app does)
 ########################################
 declare -A SETUP_SCRIPTS
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
@@ -77,7 +76,6 @@ for script in "${!SETUP_SCRIPTS[@]}"; do
     fi
 done
 
-# If no setup scripts found, exit.
 if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
     dialog --msgbox "No setup scripts found. Exiting." 6 50
     exit 1
@@ -91,13 +89,11 @@ result=$(dialog --clear --backtitle "EASY Checklist" \
   --checklist "Select the setup options you want to run:" \
   16 80 4 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
-# If user cancels or nothing selected, exit.
 if [ -z "$result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
-# Parse and sort the selected option numbers (e.g., "1 3")
 IFS=' ' read -r -a selected_options <<< "$result"
 IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
@@ -119,8 +115,8 @@ run_script() {
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    # Add a note indicating that the EXIT option will be disabled until the process completes.
-    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?\n\nNote: The EXIT button will be disabled until this script completes." 12 70; then
+    # Note: During the script execution, the EXIT option (and main menu) will be disabled.
+    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?\n\n(Please note: The EXIT button will be disabled until this script completes.)" 12 70; then
         run_script "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
