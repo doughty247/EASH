@@ -7,5 +7,5 @@
 
 ## Installation & Usage
 
-curl -L -s https://raw.githubusercontent.com/doughty247/EASH/refs/heads/main/setup.sh | bash
+curl -L -s https://raw.githubusercontent.com/doughty247/EASY/refs/heads/main/setup.sh | bash
    
