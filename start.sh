@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Version: 1.1.3 (Revised with tailboxbg)
+# Version: 1.1.4 (Revised - Repository update reverted)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
-# clones/updates the EASY repo (stashing local changes if needed),
+# clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
 # and runs the selected sub-scripts with live auto-scrolling output.
 
@@ -51,24 +51,9 @@ TARGET_DIR="$HOME/EASY"
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Cloning repository from ${REPO_URL} into ${TARGET_DIR}..."
     git clone "$REPO_URL" "$TARGET_DIR"
-elif [ -d "$TARGET_DIR/.git" ]; then
-    echo "Repository found in ${TARGET_DIR}. Updating repository..."
-    cd "$TARGET_DIR"
-    if [ -n "$(git status --porcelain)" ]; then
-         echo "Local changes detected. Stashing changes..."
-         git stash push -u -m "EASY update stash $(date +'%Y-%m-%d %H:%M:%S')"
-         STASHED=1
-    else
-         STASHED=0
-    fi
-    git pull --rebase
-    if [ "$STASHED" -eq 1 ]; then
-         echo "Restoring stashed changes..."
-         git stash pop || echo "Warning: Could not reapply stashed changes. Please check manually."
-    fi
 else
-    echo "Directory ${TARGET_DIR} exists but is not a git repository. Removing and cloning anew..."
-    rm -rf "$TARGET_DIR"
+    echo "Repository found in ${TARGET_DIR}. Updating repository..."
+    sudo rm -rf "$TARGET_DIR"
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
 
@@ -132,7 +117,7 @@ run_script_live() {
     (stdbuf -oL ./"$script_file" | tee "$tmpfile") &
     local script_pid=$!
     
-    # Start dialog's tailbox in background to display the log.
+    # Launch dialog's tailbox in background to auto-scroll new lines.
     dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
     local tailbox_pid=$!
     
