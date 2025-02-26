@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+########################################
+# Check if OS is Fedora
+########################################
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [ "$ID" != "fedora" ]; then
+        echo "Sorry, this script is designed for Fedora only."
+        exit 1
+    fi
+else
+    echo "OS detection failed. This script is designed for Fedora only."
+    exit 1
+fi
+
 # Request sudo permission upfront
 sudo -v
-sudo rm -rf /EASY
+
 ########################################
 # Install Git if not already installed
 ########################################
@@ -39,13 +53,12 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions
+# Define setup scripts and their descriptions (about what the app does)
 ########################################
 declare -A SETUP_SCRIPTS
-# Key = script filename, Value = description for the menu
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
 SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud: Self-hosted file sync & share for secure storage."
-SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates: Automatically updates your apps and applies security patches."
+SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates: Automatically updates your container apps and applies security patches."
 
 ########################################
 # Build the dynamic menu and set executable permissions
