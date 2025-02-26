@@ -9,5 +9,5 @@ Effortless Automated Self-hosting for You
 
 ## Installation & Usage
 
-curl -L -s https://raw.githubusercontent.com/doughty247/EASY/refs/heads/main/setup.sh | bash
+curl -L -s https://raw.githubusercontent.com/doughty247/EASY/refs/heads/main/start.sh | bash
    
