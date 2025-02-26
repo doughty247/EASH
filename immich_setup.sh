@@ -108,6 +108,42 @@ fi
 echo
 
 ########################################
+# Ensure Docker is Running (SELinux Fix)
+########################################
+echo "${YELLOW}Verifying Docker service status...${RESET}"
+sudo systemctl start docker
+sleep 5
+if ! systemctl is-active docker >/dev/null 2>&1; then
+    echo "${RED}Docker service is not active. Checking SELinux status...${RESET}"
+    if command -v getenforce &>/dev/null; then
+        SELINUX_STATUS=$(getenforce)
+        echo "SELinux status: $SELINUX_STATUS"
+        if [ "$SELINUX_STATUS" = "Enforcing" ]; then
+            echo "${YELLOW}Setting SELinux to permissive mode temporarily...${RESET}"
+            sudo setenforce 0
+            echo "${YELLOW}Restarting Docker service...${RESET}"
+            sudo systemctl restart docker
+            sleep 5
+            if systemctl is-active docker >/dev/null 2>&1; then
+                echo "${GREEN}Docker service is now active.${RESET}"
+            else
+                echo "${RED}Docker service still failed to start. Please check 'systemctl status docker.service' for details.${RESET}"
+                exit 1
+            fi
+        else
+            echo "${RED}SELinux is not enforcing. Docker still failed to start. Please review Docker logs.${RESET}"
+            exit 1
+        fi
+    else
+        echo "${RED}Cannot determine SELinux status. Docker failed to start.${RESET}"
+        exit 1
+    fi
+else
+    echo "${GREEN}Docker service is active.${RESET}"
+fi
+echo
+
+########################################
 # Restore Backup if Needed
 ########################################
 if [ ! -d "./immich/library" ]; then
