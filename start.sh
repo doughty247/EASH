@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Version: 0.0.8
+# Version: 0.0.9
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo, displays a checklist of setup options
 # (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output updating instantly via tailboxfifo.
+# in order (top to bottom) with live output updating instantly for every new line.
 
 set -euo pipefail
 
@@ -106,20 +106,23 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using a FIFO and tailboxfifo
+# Function to run a script with live output using a FIFO and tail -f
 ########################################
 run_script_live() {
     local script_file="$1"
     local fifo="/tmp/$(basename "$script_file").fifo"
-    # Remove any stale FIFO before creating a new one
+    # Delete any stale FIFO before creating a new one
     rm -f "$fifo"
     mkfifo "$fifo"
-    # Run the sub-script with forced line buffering so output is written live to the FIFO
-    stdbuf -oL ./"$script_file" > "$fifo" 2>&1 &
-    local script_pid=$!
-    # Use dialog's tailboxfifo to display live output from the FIFO
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxfifo "$fifo" 20 80
-    wait "$script_pid"
+    # Run tail -f on the FIFO and pipe it to dialog's tailboxfifo
+    tail -f "$fifo" | dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxfifo /dev/stdin 20 80 || true &
+    local tailbox_pid=$!
+    # Run the script with forced line buffering so output is flushed live into the FIFO.
+    stdbuf -oL ./"$script_file" > "$fifo" 2>&1 || true
+    # Wait for the script to finish (ignoring non-zero exit codes)
+    wait || true
+    # Kill the tailbox process and remove the FIFO
+    kill $tailbox_pid 2>/dev/null || true
     rm -f "$fifo"
 }
 
