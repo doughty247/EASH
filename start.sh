@@ -57,11 +57,11 @@ RESET=$(tput sgr0)
 print_header() {
   clear
   echo "${MAGENTA}${BOLD}"
-  echo "    _____    _    ______   __
-  echo "   | ____|  / \  / ___\ \ / /
-  echo "   |  _|   / _ \ \___ \\ V /
-  echo "   | |___ / ___ \ ___) || |
-  echo "   |_____/_/   \_\____/ |_|   "
+  echo "    _____    _    ______   __    "
+  echo "   | ____|  / \  / ___\ \ / /    "
+  echo "   |  _|   / _ \ \___ \\ V /     "
+  echo "   | |___ / ___ \ ___) || |      "
+  echo "   |_____/_/   \_\____/ |_|      "
   echo "   Effortless Automated Self-hosting for You"
   echo "${RESET}"
   echo
