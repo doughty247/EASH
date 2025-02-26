@@ -5,8 +5,7 @@
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo, displays a checklist of setup options
 # (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output updating instantly,
-# displaying only the last 20 lines at any given time.
+# in order (top to bottom) with live output displayed in a programbox.
 
 set -euo pipefail
 
@@ -107,32 +106,11 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live-updating output
-# This function runs the sub-script with forced line buffering,
-# appends output to a temporary file, and in a loop every 0.1 seconds
-# displays only the last 20 lines of the file in a dialog infobox.
+# Function to run a script with live output using dialog --programbox
 ########################################
 run_script_live() {
     local script_file="$1"
-    local tmpfile
-    tmpfile=$(mktemp)
-    rm -f "$tmpfile"
-    touch "$tmpfile"
-    
-    # Run the sub-script with forced line buffering so output is written live.
-    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
-    local script_pid=$!
-    
-    # Continuously update the infobox with the last 20 lines of output.
-    while kill -0 "$script_pid" 2>/dev/null; do
-        output=$(tail -n 20 "$tmpfile")
-        dialog --clear --infobox "$output" 20 80
-        sleep 0.1
-    done
-    
-    # After the script finishes, display final output.
-    dialog --clear --title "Final Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
-    rm -f "$tmpfile"
+    dialog --title "Live Output: $(basename "$script_file" .sh)" --programbox "Running $(basename "$script_file" .sh)..." 20 80 < <(stdbuf -oL ./"$script_file")
 }
 
 ########################################
