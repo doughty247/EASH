@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Version: 1.1.2 (Revised with stash)
+# Version: 1.1.3 (Revised with tailboxbg)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
-# clones/updates the EASY repo, displays a checklist of setup options
-# (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output displayed in a programbox.
+# clones/updates the EASY repo (stashing local changes if needed),
+# displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
+# and runs the selected sub-scripts with live auto-scrolling output.
 
 set -euo pipefail
 
@@ -54,7 +54,6 @@ if [ ! -d "$TARGET_DIR" ]; then
 elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
     cd "$TARGET_DIR"
-    # If there are local changes, stash them
     if [ -n "$(git status --porcelain)" ]; then
          echo "Local changes detected. Stashing changes..."
          git stash push -u -m "EASY update stash $(date +'%Y-%m-%d %H:%M:%S')"
@@ -76,7 +75,7 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions (what each app does)
+# Define setup scripts and their descriptions
 ########################################
 declare -A SETUP_SCRIPTS
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
@@ -122,11 +121,27 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using dialog --programbox
+# Function to run a script with live auto-scrolling output using dialog --tailboxbg
 ########################################
 run_script_live() {
     local script_file="$1"
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --programbox "Running $(basename "$script_file" .sh)..." 20 80 < <(stdbuf -oL ./"$script_file")
+    local tmpfile
+    tmpfile=$(mktemp)
+    
+    # Run the subscript, teeing its output to a temporary file.
+    (stdbuf -oL ./"$script_file" | tee "$tmpfile") &
+    local script_pid=$!
+    
+    # Start dialog's tailbox in background to display the log.
+    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
+    local tailbox_pid=$!
+    
+    # Wait for the subscript to finish.
+    wait "$script_pid"
+    
+    # Kill the tailbox dialog once done.
+    kill "$tailbox_pid" 2>/dev/null || true
+    rm -f "$tmpfile"
 }
 
 ########################################
