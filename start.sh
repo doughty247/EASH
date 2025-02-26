@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Version: 1.1.8
+# Version: 1.1.10 Stable Release
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # dynamically builds a checklist based on all files in the EASY directory
-# that end with "_setup.sh" (with no descriptions), and runs the selected
-# sub-scripts sequentially. Before running each subscript, the terminal
-# (and its scrollback) is fully cleared.
+# that end with "_setup.sh". In the checklist, the displayed names have the
+# suffix removed, underscores replaced with spaces, and each word capitalized.
+# The selected sub-scripts are then run sequentially with output printed
+# directly to the terminal, with the terminal fully cleared before each.
+# After all selected scripts have been executed, a TUI message box is shown.
 
 set -euo pipefail
 
@@ -55,6 +57,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "$REPO_URL" "$TARGET_DIR"
 else
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
+    cd "$HOME"  # Move out of the repository to avoid removal issues.
     sudo rm -rf "$TARGET_DIR"
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
@@ -62,25 +65,52 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Dynamically build checklist based on files ending with _setup.sh
+# Function to convert a filename into a display name:
+# - Remove the suffix "_setup.sh"
+# - Replace underscores with spaces
+# - Capitalize each word
 ########################################
-checklist_items=()
-declare -A SCRIPT_MAP  # maps option number to script filename
-option_counter=1
+to_title() {
+    # Remove suffix and replace underscores with spaces
+    local base="${1%_setup.sh}"
+    local spaced
+    spaced=$(echo "$base" | tr '_' ' ')
+    # Capitalize each word using sed (GNU sed required)
+    echo "$spaced" | sed -r 's/(^| )(.)/\1\u\2/g'
+}
+
+########################################
+# Dynamically build checklist from files ending with _setup.sh
+########################################
+declare -A SCRIPT_MAPPING  # Maps option number to script filename
+display_names=()
 
 for script in *_setup.sh; do
     if [ -f "$script" ]; then
         chmod +x "$script"
-        checklist_items+=("$option_counter" "$script" "off")
-        SCRIPT_MAP["$option_counter"]="$script"
-        ((option_counter++))
+        display_names+=("$(to_title "$script")")
+        SCRIPT_MAPPING["$(to_title "$script")"]="$script"
     fi
 done
 
-if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
+if [ "${#display_names[@]}" -eq 0 ]; then
     dialog --msgbox "No setup scripts found in the directory. Exiting." 6 50
     exit 1
 fi
+
+# Sort the display names alphabetically.
+IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
+unset IFS
+
+# Build checklist items with sequential option numbers.
+checklist_items=()
+declare -A OPTION_TO_NAME
+option_counter=1
+for name in "${sorted_display_names[@]}"; do
+    checklist_items+=("$option_counter" "$name" "off")
+    OPTION_TO_NAME["$option_counter"]="$name"
+    ((option_counter++))
+done
 
 ########################################
 # Display dynamic checklist using dialog
@@ -96,7 +126,7 @@ if [ -z "$result" ]; then
 fi
 
 IFS=' ' read -r -a selected_options <<< "$result"
-IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
+IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
@@ -114,11 +144,11 @@ clear_screen() {
 run_script_live() {
     local script_file="$1"
     clear_screen
-    echo "Running $(basename "$script_file" .sh)..."
+    echo "Running $(basename "$script_file" _setup.sh)..."
     echo "----------------------------------------"
     stdbuf -oL ./"$script_file"
     echo "----------------------------------------"
-    echo "$(basename "$script_file" .sh) completed."
+    echo "$(basename "$script_file" _setup.sh) completed."
     echo "Press Enter to continue..."
     read -r
     clear_screen
@@ -127,10 +157,12 @@ run_script_live() {
 ########################################
 # Run each selected setup script sequentially
 ########################################
-for opt in "${sorted[@]}"; do
-    script_file="${SCRIPT_MAP[$opt]}"
+for opt in "${sorted_options[@]}"; do
+    display_name="${OPTION_TO_NAME[$opt]}"
+    script_file="${SCRIPT_MAPPING[$display_name]}"
     run_script_live "$script_file"
 done
 
 clear_screen
-echo "All selected setup scripts have been executed."
+dialog --msgbox "All selected setup scripts have been executed." 6 50
+clear_screen
