@@ -1,6 +1,6 @@
 ## E.A.S.Y
 
-## Easy Automated Self-hosting for You
+Easy Automated Self-hosting for You
 
 ## Prerequisites
 
