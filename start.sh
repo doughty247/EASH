@@ -20,9 +20,7 @@ fi
 ########################################
 # Clone or update the repository containing our scripts
 ########################################
-# Set your repository URL here (update as needed)
 REPO_URL="https://github.com/doughty247/EASY.git"
-# Set the target directory where the repository will be cloned
 TARGET_DIR="$HOME/EASY"
 
 if [ ! -d "$TARGET_DIR" ]; then
@@ -37,6 +35,15 @@ fi
 # Change directory to the repository
 cd "$TARGET_DIR"
 
+# Ensure the setup scripts are executable
+chmod +x immich_setup.sh nextcloud_setup.sh auto_updates_setup.sh
+
+# Debug info: show current directory contents
+echo "Current directory: $(pwd)"
+echo "Listing files:"
+ls -l
+read -rp "Press Enter to continue..."
+
 ########################################
 # EASY TUI Menu: Effortless Automated Self-hosting for You
 ########################################
@@ -44,7 +51,7 @@ cd "$TARGET_DIR"
 # Temporary file for capturing dialog output
 TEMP_FILE=$(mktemp)
 
-# ANSI Colors and formatting (used in messages printed by dialog)
+# ANSI Colors and formatting for dialog messages
 GREEN=$(tput setaf 2)
 YELLOW=$(tput setaf 3)
 BLUE=$(tput setaf 4)
@@ -52,6 +59,20 @@ MAGENTA=$(tput setaf 5)
 RED=$(tput setaf 1)
 BOLD=$(tput bold)
 RESET=$(tput sgr0)
+
+# Function to print the EASY header in ASCII art
+print_header() {
+  clear
+  echo "${MAGENTA}${BOLD}"
+  echo "    _____    _    ______   __"
+  echo "   | ____|  / \\  / ___\\ \\ / /"
+  echo "   |  _|   / _ \\ \\___ \\\\ V /"
+  echo "   | |___ / ___ \\ ___) || |"
+  echo "   |_____/_/   \\_\\____/ |_|   "
+  echo "   Effortless Automated Self-hosting for You"
+  echo "${RESET}"
+  echo
+}
 
 # Function to display the menu using dialog
 show_menu() {
@@ -77,7 +98,8 @@ while true; do
   choice=$(<"$TEMP_FILE")
   case "$choice" in
     1)
-      if confirm_choice "Immich Setup" "This script installs and configures Immich via Docker Compose on Fedora.\n\nIt pulls the latest docker-compose file and example environment, and sets up the Immich container."; then
+      if confirm_choice "Immich Setup" "This script installs and configures Immich via Docker Compose on Fedora.
+It downloads the latest docker-compose file and example environment file, and sets up the Immich container."; then
           if [[ -x "./immich_setup.sh" ]]; then
               dialog --infobox "Running Immich Setup..." 4 50
               ./immich_setup.sh
@@ -89,7 +111,8 @@ while true; do
       fi
       ;;
     2)
-      if confirm_choice "Nextcloud Setup" "This script installs and configures Nextcloud on your server.\n\nIt sets up Nextcloud using the provided Docker Compose configuration."; then
+      if confirm_choice "Nextcloud Setup" "This script installs and configures Nextcloud on your server.
+It uses Docker Compose to set up Nextcloud with your desired configuration."; then
           if [[ -x "./nextcloud_setup.sh" ]]; then
               dialog --infobox "Running Nextcloud Setup..." 4 50
               ./nextcloud_setup.sh
@@ -101,7 +124,8 @@ while true; do
       fi
       ;;
     3)
-      if confirm_choice "Auto Updates Setup" "This script configures Docker Watchtower and sets up automatic system updates on Fedora.\n\nIt uses dnf-automatic for daily security updates and schedules monthly full system upgrades."; then
+      if confirm_choice "Auto Updates Setup" "This script configures Docker Watchtower and sets up automatic system updates on Fedora.
+It uses dnf-automatic for daily security updates and schedules monthly full system upgrades."; then
           if [[ -x "./auto_updates_setup.sh" ]]; then
               dialog --infobox "Running Auto Updates Setup..." 4 50
               ./auto_updates_setup.sh
