@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# Version: 1.1.0
+# Last Updated: 2025-02-26
+# Description: EASY - Effortless Automated Self-hosting for You
+# This script checks that you're on Fedora, installs required tools, clones/updates the EASY repo,
+# displays a checklist of setup options (Immich, Nextcloud, Auto Updates), and runs the selected sub‑scripts
+# in order (top to bottom) with scrolling output inside the TUI.
+
 set -euo pipefail
 
 # Request sudo permission upfront
@@ -120,7 +127,7 @@ run_script_with_scrolling() {
     ) &
     local trunc_pid=$!
 
-    # Show the output in a tailbox (not live updating, but appears scrolling)
+    # Show the output in a tailbox (appears scrolling)
     dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
     wait "$script_pid"
     kill "$trunc_pid" 2>/dev/null || true
