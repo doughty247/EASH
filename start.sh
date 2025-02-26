@@ -21,7 +21,7 @@ fi
 # Clone or update the repository containing our scripts
 ########################################
 # Set your repository URL here (update as needed)
-REPO_URL="https://github.com/your-username/your-repo.git"
+REPO_URL="https://github.com/doughty247/EASY.git"
 # Set the target directory where the repository will be cloned
 TARGET_DIR="$HOME/EASY-scripts"
 
