@@ -43,9 +43,9 @@ cd "$TARGET_DIR"
 ########################################
 declare -A SETUP_SCRIPTS
 # Key = script filename, Value = description for the menu
-SETUP_SCRIPTS["immich_setup.sh"]="Immich Setup: Installs and configures Immich on Fedora using Docker Compose."
-SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud Setup: Installs and configures Nextcloud on your server using Docker Compose."
-SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates Setup: Configures Docker Watchtower and automatic system updates on Fedora."
+SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
+SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud: Self-hosted file sync & share for secure storage."
+SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates: Automatically updates your apps and applies security patches."
 
 ########################################
 # Build the dynamic menu and set executable permissions
