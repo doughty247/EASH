@@ -70,7 +70,6 @@ option_counter=1
 for script in "${!SETUP_SCRIPTS[@]}"; do
     if [ -f "$script" ]; then
         chmod +x "$script"
-        # Add the option with a default "off" state.
         checklist_items+=("$option_counter" "${SETUP_SCRIPTS[$script]}" "off")
         SCRIPT_MAP["$option_counter"]="$script"
         ((option_counter++))
@@ -79,7 +78,7 @@ done
 
 # If no setup scripts found, exit.
 if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
-    echo "No setup scripts found. Exiting."
+    dialog --msgbox "No setup scripts found. Exiting." 6 50
     exit 1
 fi
 
@@ -93,12 +92,12 @@ result=$(dialog --clear --backtitle "EASY Checklist" \
 
 # If user cancels or nothing selected, exit.
 if [ -z "$result" ]; then
-    echo "No options selected. Exiting."
+    dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
 # The result is a space-separated list of selected option numbers (e.g., "1 3")
-# We sort them numerically so they run in the order they appear in the checklist.
+# Sort them numerically so they run in the order they appear in the checklist.
 IFS=' ' read -r -a selected_options <<< "$result"
 IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
@@ -108,11 +107,19 @@ unset IFS
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    echo "Running $(basename "$script_file" .sh)..."
-    # Run the script in a subshell so that control returns even if it exits.
-    ( ./"$script_file" )
-    echo "Completed $(basename "$script_file" .sh)."
-    read -rp "Press Enter to continue to the next option..."
+    # Confirm the user's choice in a dialog
+    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
+        # Create a temporary file for capturing output
+        tmpfile=$(mktemp)
+        dialog --infobox "Running $(basename "$script_file" .sh)..." 4 50
+        # Run the script and capture its output
+        ( ./"$script_file" ) > "$tmpfile" 2>&1
+        # Display the output in a textbox dialog
+        dialog --title "Output: $(basename "$script_file" .sh)" --textbox "$tmpfile" 20 80
+        rm -f "$tmpfile"
+    else
+        dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
+    fi
 done
 
-echo "All selected setup scripts have been executed."
+dialog --msgbox "All selected setup scripts have been executed." 6 50
