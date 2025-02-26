@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.1
+# Version: 1.1.1 (Revised)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -51,9 +51,13 @@ TARGET_DIR="$HOME/EASY"
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Cloning repository from ${REPO_URL} into ${TARGET_DIR}..."
     git clone "$REPO_URL" "$TARGET_DIR"
-else
+elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
-    sudo rm -rf "$TARGET_DIR"
+    cd "$TARGET_DIR"
+    git pull --rebase
+else
+    echo "Directory ${TARGET_DIR} exists but is not a git repository. Removing and cloning anew..."
+    rm -rf "$TARGET_DIR"
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
 
