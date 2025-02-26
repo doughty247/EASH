@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Version: 1.1.0
+# Version: 1.1.1
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo, displays a checklist of setup options
 # (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output updating instantly for every new line.
+# in order (top to bottom) with live output updating instantly,
+# displaying only the last 20 lines at any given time.
 
 set -euo pipefail
 
@@ -107,8 +108,9 @@ unset IFS
 
 ########################################
 # Function to run a script with live-updating output
-# This function runs the script with forced line buffering and, in a loop,
-# every 0.1 seconds, updates a dialog infobox with the last 20 lines from a temporary file.
+# This function runs the sub-script with forced line buffering,
+# appends output to a temporary file, and in a loop every 0.1 seconds
+# displays only the last 20 lines of the file in a dialog infobox.
 ########################################
 run_script_live() {
     local script_file="$1"
@@ -117,18 +119,18 @@ run_script_live() {
     rm -f "$tmpfile"
     touch "$tmpfile"
     
-    # Run the sub-script in the background with forced line buffering.
+    # Run the sub-script with forced line buffering so output is written live.
     stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
     local script_pid=$!
     
-    # Loop until the script finishes, updating the infobox with the latest 20 lines.
+    # Continuously update the infobox with the last 20 lines of output.
     while kill -0 "$script_pid" 2>/dev/null; do
         output=$(tail -n 20 "$tmpfile")
         dialog --clear --infobox "$output" 20 80
         sleep 0.1
     done
     
-    # After the script finishes, display the final output.
+    # After the script finishes, display final output.
     dialog --clear --title "Final Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
     rm -f "$tmpfile"
 }
