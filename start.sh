@@ -5,8 +5,8 @@
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
-# and then runs the selected sub-scripts sequentially.
-# Before running each subscript, the terminal is cleared.
+# and runs the selected sub-scripts sequentially.
+# Before running each subscript, the terminal (and its scrollback) is fully cleared.
 
 set -euo pipefail
 
@@ -107,12 +107,20 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with output printed to the terminal
-# Clears the terminal before running the subscript and waits for user input between sub-scripts.
+# Function to fully clear the terminal (including scrollback)
+########################################
+clear_screen() {
+    clear && printf '\033[3J'
+}
+
+########################################
+# Function to run a script with its output printed directly
+# Clears the terminal fully before running the subscript,
+# then waits for user input and clears again.
 ########################################
 run_script_live() {
     local script_file="$1"
-    clear
+    clear_screen
     echo "Running $(basename "$script_file" .sh)..."
     echo "----------------------------------------"
     stdbuf -oL ./"$script_file"
@@ -120,6 +128,7 @@ run_script_live() {
     echo "$(basename "$script_file" .sh) completed."
     echo "Press Enter to continue..."
     read -r
+    clear_screen
 }
 
 ########################################
@@ -130,5 +139,5 @@ for opt in "${sorted[@]}"; do
     run_script_live "$script_file"
 done
 
-clear
+clear_screen
 echo "All selected setup scripts have been executed."
