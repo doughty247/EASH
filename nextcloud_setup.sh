@@ -1,318 +1,139 @@
 #!/usr/bin/env bash
+# Version: 1.1.8
+# Last Updated: 2025-02-26
+# Description: EASY - Effortless Automated Self-hosting for You
+# This script checks that you're on Fedora, installs required tools,
+# clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
+# dynamically builds a checklist based on all files in the EASY directory
+# that end with "_setup.sh" (with no descriptions), and runs the selected
+# sub-scripts sequentially. Before running each subscript, the terminal (and
+# its scrollback) is fully cleared. After all scripts have executed, a TUI
+# message box is shown.
+#
 set -euo pipefail
 
-# Request sudo permission upfront.
+# Request sudo permission upfront
 sudo -v
 
-# Check if Docker is installed and functioning; if not, force reinstall.
-if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-    echo "Docker is not installed or not functioning correctly. Reinstalling Docker..."
-    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest* docker-logrotate docker-engine || true
-    sudo dnf -y install dnf-plugins-core
-    FEDORA_VERSION=$(rpm -E %fedora)
-    sudo tee /etc/yum.repos.d/docker-ce.repo >/dev/null <<EOF
-[docker-ce-stable]
-name=Docker CE Stable - \$basearch
-baseurl=https://download.docker.com/linux/fedora/${FEDORA_VERSION}/\$basearch/stable
-enabled=1
-gpgcheck=1
-gpgkey=https://download.docker.com/linux/fedora/gpg
-EOF
-    sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    sudo systemctl start docker
-    sudo systemctl enable docker
-    echo "Docker reinstalled successfully."
-else
-    echo "Docker is installed and functioning correctly."
-fi
-
-# Export PROMPT_START to avoid unbound variable errors.
-export PROMPT_START=""
-
 ########################################
-# ANSI Colors for Output
+# Check if OS is Fedora
 ########################################
-GREEN=$(tput setaf 2)
-YELLOW=$(tput setaf 3)
-RED=$(tput setaf 1)
-RESET=$(tput sgr0)
-
-########################################
-# Log Output
-########################################
-exec > >(tee /tmp/nextcloud_setup_summary.txt) 2>&1
-clear
-
-########################################
-# Pre-Checks: Docker Images and Nextcloud Directory
-########################################
-echo "${YELLOW}Performing pre-checks...${RESET}"
-
-# Check for Nextcloud image
-if ! docker images nextcloud:latest --format "{{.Repository}}" | grep -q nextcloud; then
-    echo "${YELLOW}Nextcloud image not found locally. Pulling nextcloud:latest...${RESET}"
-    docker pull nextcloud:latest
-else
-    echo "${GREEN}Nextcloud image found locally.${RESET}"
-fi
-
-# Check for MariaDB image
-if ! docker images mariadb:latest --format "{{.Repository}}" | grep -q mariadb; then
-    echo "${YELLOW}MariaDB image not found locally. Pulling mariadb:latest...${RESET}"
-    docker pull mariadb:latest
-else
-    echo "${GREEN}MariaDB image found locally.${RESET}"
-fi
-
-NEXTCLOUD_DIR="${HOME}/nextcloud"
-if [ ! -d "${NEXTCLOUD_DIR}" ]; then
-    echo "${YELLOW}Nextcloud directory not found at ${NEXTCLOUD_DIR}. Creating directory...${RESET}"
-    mkdir -p "${NEXTCLOUD_DIR}"
-else
-    echo "${GREEN}Nextcloud directory exists at ${NEXTCLOUD_DIR}.${RESET}"
-fi
-echo
-
-# Detect server IP
-SERVER_IP=$(hostname -I | awk '{print $1}')
-echo "${GREEN}Detected Server IP: ${SERVER_IP}${RESET}"
-echo
-
-echo "${GREEN}Starting Nextcloud Setup...${RESET}"
-echo
-
-########################################
-# Restore Nextcloud Backup if Available
-########################################
-if [ ! -d "${NEXTCLOUD_DIR}/html" ]; then
-    echo "${YELLOW}No Nextcloud data directory found. Checking for backups...${RESET}"
-    found_backup=false
-    for b in backup_[0-9][0-9][0-9][0-9][0-9][0-9]; do
-        if [ -d "$b" ]; then
-            echo "${YELLOW}Restoring backup directory '$b' to ${NEXTCLOUD_DIR}/html...${RESET}"
-            mv "$b" "${NEXTCLOUD_DIR}/html"
-            found_backup=true
-            break
-        fi
-    done
-    if [ "$found_backup" = false ]; then
-        echo "${YELLOW}No backup found. Proceeding with a fresh installation.${RESET}"
-    fi
-fi
-echo
-
-########################################
-# Nextcloud Deployment via Docker Compose
-########################################
-cd "${NEXTCLOUD_DIR}"
-if ! docker ps -a --filter=name=nextcloud_server | grep -q nextcloud_server; then
-    echo "${YELLOW}Deploying Nextcloud using Docker Compose...${RESET}"
-    cat > docker-compose.yml <<'EOF'
-version: '3.7'
-
-services:
-  nextcloud:
-    container_name: nextcloud_server
-    image: nextcloud:latest
-    restart: always
-    ports:
-      - 8080:80
-    volumes:
-      - nextcloud_data:/var/www/html
-    environment:
-      MYSQL_HOST: db
-      MYSQL_DATABASE: nextcloud
-      MYSQL_USER: nextcloud
-      MYSQL_PASSWORD: nextcloud_password
-    depends_on:
-      - db
-
-  db:
-    container_name: nextcloud_db
-    image: mariadb:latest
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: nextcloud_root_password
-      MYSQL_DATABASE: nextcloud
-      MYSQL_USER: nextcloud
-      MYSQL_PASSWORD: nextcloud_password
-    volumes:
-      - nextcloud_db:/var/lib/mysql
-
-volumes:
-  nextcloud_data:
-  nextcloud_db:
-EOF
-    echo "${YELLOW}Starting Nextcloud container...${RESET}"
-    docker compose up -d || { echo "${RED}docker compose up failed. Exiting.${RESET}"; exit 1; }
-    echo "${GREEN}Nextcloud deployed successfully.${RESET}"
-else
-    echo "${GREEN}Nextcloud container already exists; skipping deployment.${RESET}"
-fi
-echo
-
-########################################
-# Simple Health Check for Nextcloud Container
-########################################
-echo "${YELLOW}Waiting for Nextcloud container to start...${RESET}"
-max_attempts=6
-running=false
-for i in $(seq 1 $max_attempts); do
-    status=$(docker inspect --format="{{.State.Status}}" nextcloud_server 2>/dev/null || echo "unknown")
-    if [ "$status" = "running" ]; then
-        running=true
-        break
-    fi
-    sleep 5
-done
-if [ "$running" = false ]; then
-    echo "${RED}Nextcloud container did not start within 30 seconds. Forcing reinstallation...${RESET}"
-    docker compose down
-    docker compose up -d
-    sleep 10
-    running=false
-    for i in $(seq 1 $max_attempts); do
-        status=$(docker inspect --format="{{.State.Status}}" nextcloud_server 2>/dev/null || echo "unknown")
-        if [ "$status" = "running" ]; then
-            running=true
-            break
-        fi
-        sleep 5
-    done
-    if [ "$running" = false ]; then
-        echo "${RED}Nextcloud container still not running after forced reinstallation. Exiting.${RESET}"
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [ "$ID" != "fedora" ]; then
+        echo "Sorry, this script is designed for Fedora only."
         exit 1
-    else
-        echo "${GREEN}Nextcloud container is now running after forced reinstallation.${RESET}"
     fi
 else
-    echo "${GREEN}Nextcloud container is running.${RESET}"
-fi
-echo
-
-########################################
-# Ensure Firewalld is Installed, Enabled, and Running
-########################################
-if ! command -v firewall-cmd >/dev/null 2>&1; then
-    echo "${YELLOW}Firewalld not found. Installing firewalld...${RESET}"
-    sudo dnf install -y firewalld
-fi
-if ! systemctl is-enabled --quiet firewalld; then
-    echo "${YELLOW}Firewalld is not enabled. Enabling and starting firewalld...${RESET}"
-    sudo systemctl enable firewalld
-    sudo systemctl start firewalld
-elif ! systemctl is-active --quiet firewalld; then
-    echo "${YELLOW}Firewalld is installed but not running. Starting firewalld...${RESET}"
-    sudo systemctl start firewalld
+    echo "OS detection failed. This script is designed for Fedora only."
+    exit 1
 fi
 
 ########################################
-# Delay Before Network Check
+# Install Git if not already installed
 ########################################
-echo "${YELLOW}Waiting 10 seconds before network accessibility check...${RESET}"
-sleep 10
+if ! command -v git &>/dev/null; then
+    echo "Git is not installed. Installing Git on Fedora..."
+    sudo dnf install -y git
+fi
 
 ########################################
-# Advanced Network Accessibility Check
+# Install Dialog if not already installed (for TUI)
 ########################################
-echo "${YELLOW}Checking network accessibility on port 8080...${RESET}"
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
-if [ "$HTTP_CODE" -eq 200 ]; then
-    echo "${GREEN}Nextcloud is accessible on port 8080.${RESET}"
+if ! command -v dialog &>/dev/null; then
+    echo "Dialog is not installed. Installing Dialog on Fedora..."
+    sudo dnf install -y dialog
+fi
+
+########################################
+# Clone or update the repository containing our scripts
+########################################
+REPO_URL="https://github.com/doughty247/EASY.git"
+TARGET_DIR="$HOME/EASY"
+
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Cloning repository from ${REPO_URL} into ${TARGET_DIR}..."
+    git clone "$REPO_URL" "$TARGET_DIR"
 else
-    echo "${RED}Nextcloud did not return a 200 OK on port 8080 (HTTP code: $HTTP_CODE).${RESET}"
-    echo "${YELLOW}Attempting to open port 8080 via firewalld...${RESET}"
-    sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
-    sudo firewall-cmd --reload
-    sleep 5
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://localhost:8080)
-    if [ "$HTTP_CODE" -eq 200 ]; then
-        echo "${GREEN}Port 8080 is now accessible after updating firewall rules.${RESET}"
-    else
-        echo "${RED}Port 8080 is still not accessible (HTTP code: $HTTP_CODE). Please check your network configuration manually.${RESET}"
+    echo "Repository found in ${TARGET_DIR}. Updating repository..."
+    sudo rm -rf "$TARGET_DIR"
+    git clone "$REPO_URL" "$TARGET_DIR"
+fi
+
+cd "$TARGET_DIR"
+
+########################################
+# Dynamically build checklist from files ending with _setup.sh
+########################################
+checklist_items=()
+declare -A SCRIPT_MAP
+option_counter=1
+
+for script in *_setup.sh; do
+    if [ -f "$script" ]; then
+        chmod +x "$script"
+        checklist_items+=("$option_counter" "$script" "off")
+        SCRIPT_MAP["$option_counter"]="$script"
+        ((option_counter++))
     fi
+done
+
+if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
+    dialog --msgbox "No setup scripts found in the directory. Exiting." 6 50
+    exit 1
 fi
-echo
 
 ########################################
-# Create CAN_INSTALL File to Prevent Reinstallation Errors
+# Display dynamic checklist using dialog
 ########################################
-echo "${YELLOW}Ensuring CAN_INSTALL file exists in the Nextcloud config directory...${RESET}"
-docker exec -u www-data nextcloud_server bash -c 'if [ ! -f /var/www/html/config/CAN_INSTALL ]; then touch /var/www/html/config/CAN_INSTALL; fi'
-echo "${GREEN}CAN_INSTALL file ensured.${RESET}"
-echo
+result=$(dialog --clear --backtitle "EASY Checklist" \
+  --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
+  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
+  16 80 4 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
-########################################
-# Force Database Configuration to Use MariaDB via sed
-########################################
-echo "${YELLOW}Forcing Nextcloud to use MariaDB as the database backend...${RESET}"
-if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
-    docker exec -u www-data nextcloud_server sed -i "s/'dbtype' => 'sqlite'/'dbtype' => 'mysql'/g" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbhost' => '.*',/'dbhost' => 'db',/g" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbname' => '.*',/'dbname' => 'nextcloud',/g" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbuser' => '.*',/'dbuser' => 'nextcloud',/g" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s/'dbpassword' => '.*',/'dbpassword' => 'nextcloud_password',/g" /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "/'dbsocket'/d" /var/www/html/config/config.php
-    echo "${GREEN}Database configuration forced to use MariaDB via sed.${RESET}"
-else
-    echo "${RED}Config file not found. Cannot update database configuration.${RESET}"
+if [ -z "$result" ]; then
+    dialog --msgbox "No options selected. Exiting." 6 50
+    exit 0
 fi
-echo
+
+IFS=' ' read -r -a selected_options <<< "$result"
+IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
+unset IFS
 
 ########################################
-# Update Nextcloud Configuration via sed
+# Function to fully clear the terminal (including scrollback)
 ########################################
-echo "${YELLOW}Updating Nextcloud configuration (trusted_domains and overwrite.cli.url)...${RESET}"
-if docker exec -u www-data nextcloud_server test -f /var/www/html/config/config.php; then
-    docker exec -u www-data nextcloud_server sed -i "#'trusted_domains' => array (# a\    '${SERVER_IP}'," /var/www/html/config/config.php
-    docker exec -u www-data nextcloud_server sed -i "s#'overwrite.cli.url' => '.*',#'overwrite.cli.url' => 'http://${SERVER_IP}:8080',#" /var/www/html/config/config.php
-    echo "${GREEN}Configuration updated.${RESET}"
-else
-    echo "${RED}Config file not found. Cannot update configuration.${RESET}"
-fi
-echo "${GREEN}Restarting Nextcloud container to apply configuration changes...${RESET}"
-docker restart nextcloud_server
-echo
+clear_screen() {
+    clear && printf '\033[3J'
+}
 
 ########################################
-# Enable Nextcloud Auto-Start on Boot via systemd
+# Function to run a script with output printed directly.
+# Clears the terminal fully before running the subscript,
+# then waits for user input and clears again.
 ########################################
-echo "${YELLOW}Setting up auto-start on boot for Nextcloud Docker Compose...${RESET}"
-HOME_DIR=$(eval echo ~$USER)
-SERVICE_FILE="/etc/systemd/system/nextcloud-compose.service"
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=Nextcloud Docker Compose Service
-Requires=docker.service
-After=docker.service
-
-[Service]
-Type=oneshot
-WorkingDirectory=${HOME_DIR}/nextcloud
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemctl daemon-reload
-sudo systemctl enable nextcloud-compose.service
-echo "${GREEN}Auto-start service created and enabled.${RESET}"
-echo
+run_script_live() {
+    local script_file="$1"
+    clear_screen
+    echo "Running $(basename "$script_file" .sh)..."
+    echo "----------------------------------------"
+    stdbuf -oL ./"$script_file"
+    echo "----------------------------------------"
+    echo "$(basename "$script_file" .sh) completed."
+    echo "Press Enter to continue..."
+    read -r
+    clear_screen
+}
 
 ########################################
-# Final Status Report with Dynamic QR Code
+# Run each selected setup script sequentially
 ########################################
-echo "${GREEN}=== Nextcloud Setup Complete ===${RESET}"
-echo "Nextcloud is deployed and running on port 8080."
-echo "Access it via http://${SERVER_IP}:8080"
-echo
+for opt in "${sorted[@]}"; do
+    script_file="${SCRIPT_MAP[$opt]}"
+    run_script_live "$script_file"
+done
 
-TERM_COLS=$(tput cols)
-scale=$(( (TERM_COLS - 2) / 21 ))
-if [ "$scale" -lt 1 ]; then scale=1; fi
-if [ "$scale" -gt 10 ]; then scale=10; fi
-
-echo "${GREEN}Scan the following QR code with your Nextcloud app:${RESET}"
-qrencode -t ANSIUTF8 -l H -s "$scale" "http://${SERVER_IP}:8080"
+# After all scripts have executed, return to a TUI message box.
+clear_screen
+dialog --msgbox "All selected setup scripts have been executed." 6 50
+clear_screen
