@@ -103,18 +103,24 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Run each selected setup script in order (top to bottom) with live output
+# Run each selected setup script in order (top to bottom) with live output inside TUI
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
         tmpfile=$(mktemp)
-        # Use stdbuf to force line buffering, then run the script and pipe its output to the temp file.
-        ( stdbuf -oL ./"$script_file" ) > "$tmpfile" 2>&1 &
-        pid=$!
-        # Use tailbox to display live output; the user can press a key to exit once finished.
-        dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
-        wait $pid
+        # Run the script with forced line buffering, redirecting its output to tmpfile.
+        stdbuf -oL ./"$script_file" > "$tmpfile" 2>&1 &
+        script_pid=$!
+        # Launch dialog tailbox in background to show live updating output.
+        dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
+        tailbox_pid=$!
+        # Wait for the script to finish.
+        wait $script_pid
+        # Kill the background tailbox process.
+        kill $tailbox_pid 2>/dev/null || true
+        # Optionally, display any final output in a tailbox (press any key to close)
+        dialog --title "Final Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
         rm -f "$tmpfile"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
