@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Version: 0.0.4
+# Version: 0.0.5
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo, displays a checklist of setup options
 # (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output updated every 0.5 seconds
-# inside the TUI.
+# in order (top to bottom) with live output updated every line within the TUI.
 
 set -euo pipefail
 
@@ -107,31 +106,28 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output updating every line
-# It runs the script with forced line buffering, and in a loop, every 0.5 seconds,
-# it displays the last 20 lines of output in an infobox to simulate auto scrolling.
+# Function to run a script with live output using a temporary file and tail -F
 ########################################
 run_script_live() {
     local script_file="$1"
     local tmpfile
     tmpfile=$(mktemp)
-    rm -f "$tmpfile" 2>/dev/null
+    # Remove any stale temporary file and create an empty file.
+    rm -f "$tmpfile"
     touch "$tmpfile"
     
-    # Run the script in the background with forced line buffering
+    # Run the script with forced line buffering so output is written live to tmpfile.
     stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
     local script_pid=$!
-
-    # Loop until the script finishes, updating the displayed output
-    while kill -0 "$script_pid" 2>/dev/null; do
-        # Get last 20 lines of output
-        output=$(tail -n 20 "$tmpfile")
-        dialog --infobox "$output" 20 80
-        sleep 0.5
-    done
     
-    # After the script finishes, show final output
-    dialog --tailbox "$tmpfile" 20 80
+    # Use tail -F to continuously output the last 20 lines from tmpfile.
+    tail -F -n 20 "$tmpfile" | dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox /dev/stdin 20 80 &
+    local tail_pid=$!
+    
+    # Wait for the script to finish.
+    wait "$script_pid"
+    # Kill the tail process after script completion.
+    kill $tail_pid 2>/dev/null || true
     rm -f "$tmpfile"
 }
 
