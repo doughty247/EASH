@@ -274,80 +274,6 @@ fi
 echo
 
 ########################################
-# Watchtower & System Updates
-########################################
-echo "${YELLOW}Updating packages on Fedora...${RESET}"
-sudo dnf update -y
-
-echo "${YELLOW}Installing Watchtower for container auto-updates...${RESET}"
-if sudo docker ps -a --filter=name=watchtower | grep -qi watchtower; then
-    sudo docker rm -f watchtower
-fi
-sudo docker run -d --name watchtower --restart always \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    containrrr/watchtower --schedule "0 0 * * *" --cleanup --include-restarting
-echo
-
-########################################
-# Security Updates (dnf-automatic)
-########################################
-echo "${YELLOW}Configuring security updates...${RESET}"
-sudo dnf install -y dnf-automatic
-if [ ! -f /etc/dnf/automatic.conf ]; then
-    echo "${YELLOW}/etc/dnf/automatic.conf not found. Creating default configuration...${RESET}"
-    sudo tee /etc/dnf/automatic.conf >/dev/null <<'EOF'
-[commands]
-upgrade_type = security
-apply_updates = yes
-reboot = True
-
-[emitters]
-emit_via = stdio
-EOF
-else
-    sudo sed -i "s/^upgrade_type = .*/upgrade_type = security/" /etc/dnf/automatic.conf
-    sudo sed -i "s/^apply_updates = .*/apply_updates = yes/" /etc/dnf/automatic.conf
-    sudo sed -i "s/^reboot = .*/reboot = True/" /etc/dnf/automatic.conf
-fi
-
-sudo mkdir -p /etc/systemd/system/dnf-automatic.timer.d
-echo -e "[Timer]\nOnCalendar=*-*-* 03:00:00" | sudo tee /etc/systemd/system/dnf-automatic.timer.d/override.conf
-sudo systemctl daemon-reload
-sudo systemctl enable --now dnf-automatic.timer
-echo "${GREEN}dnf-automatic is set for 3 AM security updates.${RESET}"
-echo
-
-########################################
-# Monthly Full System Updates
-########################################
-echo "${YELLOW}Setting up monthly full system updates...${RESET}"
-sudo tee /etc/systemd/system/full-update.service >/dev/null <<'EOF'
-[Unit]
-Description=Full System Update Service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/dnf upgrade -y
-EOF
-
-sudo tee /etc/systemd/system/full-update.timer >/dev/null <<'EOF'
-[Unit]
-Description=Timer for Full System Update Service
-
-[Timer]
-OnCalendar=*-*-01 04:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now full-update.timer
-echo "${GREEN}Full system update timer set for Fedora at 4 AM on the 1st of each month.${RESET}"
-echo
-
-########################################
 # Restore Immich Data (if backup was made)
 ########################################
 if [ "${backup_required:-false}" = true ]; then
@@ -366,8 +292,6 @@ status_report="Immich Setup Complete.
 Docker is installed and running.
 Immich container running (if not healthy, a warning was issued).
 Docker credential helper is configured (using 'pass').
-Watchtower is installed for auto-updates.
-Security updates are configured.
-Monthly full system updates are scheduled."
+ghcr.io login completed."
 echo "$status_report"
 echo "${GREEN}=== Setup Complete ===${RESET}"
