@@ -19,7 +19,6 @@ RESET=$(tput sgr0)
 # Log Output
 ########################################
 exec > >(tee /tmp/immich_setup_summary.txt) 2>&1
-clear
 
 echo "${GREEN}Starting Immich Setup Script on Fedora...${RESET}"
 echo
