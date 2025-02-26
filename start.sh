@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Request sudo permission upfront
+sudo -v
+
+########################################
 # Check if OS is Fedora
+########################################
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     if [ "$ID" != "fedora" ]; then
@@ -12,10 +17,6 @@ else
     echo "OS detection failed. This script is designed for Fedora only."
     exit 1
 fi
-
-# Request sudo permission upfront
-sudo -v
-sudo rm -rf ~/EASY
 
 ########################################
 # Install Git if not already installed
@@ -60,96 +61,58 @@ SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud: Self-hosted file sync & share fo
 SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates: Automatically updates your container apps and applies security patches."
 
 ########################################
-# Build the dynamic menu and set executable permissions
+# Build the dynamic checklist and set executable permissions
 ########################################
-menu_items=()
+checklist_items=()
 declare -A SCRIPT_MAP  # maps option number to script filename
 option_counter=1
 
 for script in "${!SETUP_SCRIPTS[@]}"; do
     if [ -f "$script" ]; then
         chmod +x "$script"
-        menu_items+=("$option_counter" "${SETUP_SCRIPTS[$script]}")
+        # Add the option with a default "off" state.
+        checklist_items+=("$option_counter" "${SETUP_SCRIPTS[$script]}" "off")
         SCRIPT_MAP["$option_counter"]="$script"
         ((option_counter++))
     fi
 done
 
-# Always add the exit option
-menu_items+=("$option_counter" "Exit")
-EXIT_OPTION="$option_counter"
-
-# Debug info: show current directory contents
-echo "Current directory: $(pwd)"
-echo "Listing files:"
-ls -l
-read -rp "Press Enter to continue..."
+# If no setup scripts found, exit.
+if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
+    echo "No setup scripts found. Exiting."
+    exit 1
+fi
 
 ########################################
-# TUI Menu using Dialog: EASY (Effortless Automated Self-hosting for You)
+# Display a checklist for all options using dialog
 ########################################
+result=$(dialog --clear --backtitle "EASY Checklist" \
+  --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
+  --checklist "Select the setup options you want to run:" \
+  16 80 4 "${checklist_items[@]}" 2>&1 >/dev/tty)
 
-# Temporary file for capturing dialog output
-TEMP_FILE=$(mktemp)
-
-# ANSI Colors and formatting for dialog messages
-GREEN=$(tput setaf 2)
-YELLOW=$(tput setaf 3)
-BLUE=$(tput setaf 4)
-MAGENTA=$(tput setaf 5)
-RED=$(tput setaf 1)
-BOLD=$(tput bold)
-RESET=$(tput sgr0)
-
-# Function to print the EASY header in ASCII art (for non-dialog output)
-print_header() {
-  clear
-  echo "${MAGENTA}${BOLD}"
-  echo "    _____    _    ______   __"
-  echo "   | ____|  / \\  / ___\\ \\ / /"
-  echo "   |  _|   / _ \\ \\___ \\\\ V /"
-  echo "   | |___ / ___ \\ ___) || |"
-  echo "   |_____/_/   \\_\\____/ |_|   "
-  echo "   Effortless Automated Self-hosting for You"
-  echo "${RESET}"
-  echo
-}
-
-# Function to display the menu using Dialog
-show_menu() {
-  dialog --clear --backtitle "EASY Menu" \
-    --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-    --menu "Use the arrow keys to navigate. Select an option for more details." 16 80 4 \
-    "${menu_items[@]}" 2>"$TEMP_FILE"
-}
-
-# Function to display a confirmation prompt for the selected option
-confirm_choice() {
-  local title="$1"
-  local description="$2"
-  dialog --clear --title "$title" \
-    --yesno "$description\n\nProceed with this setup?" 10 70
-}
-
-while true; do
-  show_menu
-  choice=$(<"$TEMP_FILE")
-  if [ "$choice" == "$EXIT_OPTION" ]; then
-    dialog --msgbox "Exiting. Have a great day!" 4 40
-    rm -f "$TEMP_FILE"
-    clear
+# If user cancels or nothing selected, exit.
+if [ -z "$result" ]; then
+    echo "No options selected. Exiting."
     exit 0
-  elif [[ -n "${SCRIPT_MAP[$choice]:-}" ]]; then
-    script_file="${SCRIPT_MAP[$choice]}"
-    confirm_choice "$(basename "$script_file" .sh)" "${SETUP_SCRIPTS[$script_file]}"
-    if [ $? -eq 0 ]; then
-      dialog --infobox "Running $(basename "$script_file" .sh)..." 4 50
-      # Run the selected script in a subshell to ensure control returns to this menu even if it calls exit.
-      ( ./"$script_file" )
-    else
-      dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
-    fi
-  else
-    dialog --msgbox "Invalid option. Please try again." 4 40
-  fi
+fi
+
+# The result is a space-separated list of selected option numbers (e.g., "1 3")
+# We sort them numerically so they run in the order they appear in the checklist.
+IFS=' ' read -r -a selected_options <<< "$result"
+IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
+unset IFS
+
+########################################
+# Run each selected setup script in order (top to bottom)
+########################################
+for opt in "${sorted[@]}"; do
+    script_file="${SCRIPT_MAP[$opt]}"
+    echo "Running $(basename "$script_file" .sh)..."
+    # Run the script in a subshell so that control returns even if it exits.
+    ( ./"$script_file" )
+    echo "Completed $(basename "$script_file" .sh)."
+    read -rp "Press Enter to continue to the next option..."
 done
+
+echo "All selected setup scripts have been executed."
