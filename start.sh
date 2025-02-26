@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Version: 1.1.4
+# Version: 1.1.8
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
-# displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
-# and runs the selected sub-scripts sequentially.
-# Before running each subscript, the terminal (and its scrollback) is fully cleared.
+# dynamically builds a checklist based on all files in the EASY directory
+# that end with "_setup.sh" (with no descriptions), and runs the selected
+# sub-scripts sequentially. Before running each subscript, the terminal
+# (and its scrollback) is fully cleared.
 
 set -euo pipefail
 
@@ -61,40 +62,32 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions
-########################################
-declare -A SETUP_SCRIPTS
-SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
-SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud: Self-hosted file sync & share for secure storage."
-SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates: Automatically updates your container apps and applies security patches."
-
-########################################
-# Build the dynamic checklist and set executable permissions
+# Dynamically build checklist based on files ending with _setup.sh
 ########################################
 checklist_items=()
 declare -A SCRIPT_MAP  # maps option number to script filename
 option_counter=1
 
-for script in "${!SETUP_SCRIPTS[@]}"; do
+for script in *_setup.sh; do
     if [ -f "$script" ]; then
         chmod +x "$script"
-        checklist_items+=("$option_counter" "${SETUP_SCRIPTS[$script]}" "off")
+        checklist_items+=("$option_counter" "$script" "off")
         SCRIPT_MAP["$option_counter"]="$script"
         ((option_counter++))
     fi
 done
 
 if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
-    dialog --msgbox "No setup scripts found. Exiting." 6 50
+    dialog --msgbox "No setup scripts found in the directory. Exiting." 6 50
     exit 1
 fi
 
 ########################################
-# Display checklist using dialog
+# Display dynamic checklist using dialog
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup options you want to run (they will execute from top to bottom):" \
+  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
   16 80 4 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$result" ]; then
@@ -114,7 +107,7 @@ clear_screen() {
 }
 
 ########################################
-# Function to run a script with its output printed directly
+# Function to run a script with its output printed directly.
 # Clears the terminal fully before running the subscript,
 # then waits for user input and clears again.
 ########################################
