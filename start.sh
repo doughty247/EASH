@@ -98,22 +98,35 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using a FIFO
+# Function to run a script with scrolling output effect
+# It runs the script with forced line buffering and ensures that the temporary
+# output file is deleted before starting.
 ########################################
-run_script_live() {
+run_script_with_scrolling() {
     local script_file="$1"
-    local fifo="/tmp/$(basename "$script_file").fifo"
-    # Ensure any previous FIFO is removed before creating a new one.
-    [ -e "$fifo" ] && rm -f "$fifo"
-    mkfifo "$fifo"
-    # Start Dialog tailbox to display live output from the FIFO
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$fifo" 20 80 &
-    local tailbox_pid=$!
-    # Run the script with forced line buffering and direct output to the FIFO
-    stdbuf -oL ./"$script_file" > "$fifo" 2>&1
-    # Wait for the tailbox to finish and then remove the FIFO
-    wait $tailbox_pid
-    rm -f "$fifo"
+    local tmpfile
+    tmpfile=$(mktemp)
+    # Ensure any stale tmpfile is removed
+    [ -e "$tmpfile" ] && rm -f "$tmpfile"
+    
+    # Run the script with forced line buffering, appending output to tmpfile
+    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
+    local script_pid=$!
+
+    # In background, continuously truncate tmpfile to its last 20 lines
+    (
+      while kill -0 "$script_pid" 2>/dev/null; do
+          tail -n 20 "$tmpfile" > "${tmpfile}.tmp" && mv "${tmpfile}.tmp" "$tmpfile"
+          sleep 0.5
+      done
+    ) &
+    local trunc_pid=$!
+
+    # Display the output using dialog's tailbox
+    dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
+    wait "$script_pid"
+    kill "$trunc_pid" 2>/dev/null || true
+    rm -f "$tmpfile"
 }
 
 ########################################
@@ -122,7 +135,7 @@ run_script_live() {
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script_live "$script_file"
+        run_script_with_scrolling "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
