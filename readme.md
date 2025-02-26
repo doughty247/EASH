@@ -1,3 +1,5 @@
+## E.A.S.Y
+
 ## Easy Automated Self-hosting for You
 
 ## Prerequisites
