@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.1 (Revised)
+# Version: 1.1.2 (Revised with stash)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -54,7 +54,19 @@ if [ ! -d "$TARGET_DIR" ]; then
 elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
     cd "$TARGET_DIR"
+    # If there are local changes, stash them
+    if [ -n "$(git status --porcelain)" ]; then
+         echo "Local changes detected. Stashing changes..."
+         git stash push -u -m "EASY update stash $(date +'%Y-%m-%d %H:%M:%S')"
+         STASHED=1
+    else
+         STASHED=0
+    fi
     git pull --rebase
+    if [ "$STASHED" -eq 1 ]; then
+         echo "Restoring stashed changes..."
+         git stash pop || echo "Warning: Could not reapply stashed changes. Please check manually."
+    fi
 else
     echo "Directory ${TARGET_DIR} exists but is not a git repository. Removing and cloning anew..."
     rm -rf "$TARGET_DIR"
