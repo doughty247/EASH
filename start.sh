@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Version: 0.0.1
+# Version: 0.0.4
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
-# This script checks that you're on Fedora, installs required tools, clones/updates the EASY repo,
-# displays a checklist of setup options (Immich, Nextcloud, Auto Updates), and then runs the selected
-# sub-scripts in order (top to bottom) with scrolling output contained within the TUI.
+# This script checks that you're on Fedora, installs required tools,
+# clones/updates the EASY repo, displays a checklist of setup options
+# (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
+# in order (top to bottom) with live output updated every 0.5 seconds
+# inside the TUI.
 
 set -euo pipefail
 
@@ -105,34 +107,31 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with scrolling output effect
-# It runs the script with forced line buffering and ensures the temporary
-# output file is freshly created before use.
+# Function to run a script with live output updating every line
+# It runs the script with forced line buffering, and in a loop, every 0.5 seconds,
+# it displays the last 20 lines of output in an infobox to simulate auto scrolling.
 ########################################
-run_script_with_scrolling() {
+run_script_live() {
     local script_file="$1"
     local tmpfile
     tmpfile=$(mktemp)
-    # Remove any stale file (shouldn't be needed, but to be safe)
-    rm -f "$tmpfile"
-    # Create an empty temporary file
+    rm -f "$tmpfile" 2>/dev/null
     touch "$tmpfile"
     
+    # Run the script in the background with forced line buffering
     stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
     local script_pid=$!
 
-    # In the background, continuously truncate tmpfile to its last 20 lines
-    (
-      while kill -0 "$script_pid" 2>/dev/null; do
-          tail -n 20 "$tmpfile" > "${tmpfile}.tmp" && mv "${tmpfile}.tmp" "$tmpfile"
-          sleep 0.5
-      done
-    ) &
-    local trunc_pid=$!
-
-    dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
-    wait "$script_pid"
-    kill "$trunc_pid" 2>/dev/null || true
+    # Loop until the script finishes, updating the displayed output
+    while kill -0 "$script_pid" 2>/dev/null; do
+        # Get last 20 lines of output
+        output=$(tail -n 20 "$tmpfile")
+        dialog --infobox "$output" 20 80
+        sleep 0.5
+    done
+    
+    # After the script finishes, show final output
+    dialog --tailbox "$tmpfile" 20 80
     rm -f "$tmpfile"
 }
 
@@ -142,7 +141,7 @@ run_script_with_scrolling() {
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script_with_scrolling "$script_file"
+        run_script_live "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
