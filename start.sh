@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 0.0.9
+# Version: 1.1.0
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -106,24 +106,31 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using a FIFO and tail -f
+# Function to run a script with live-updating output
+# This function runs the script with forced line buffering and, in a loop,
+# every 0.1 seconds, updates a dialog infobox with the last 20 lines from a temporary file.
 ########################################
 run_script_live() {
     local script_file="$1"
-    local fifo="/tmp/$(basename "$script_file").fifo"
-    # Delete any stale FIFO before creating a new one
-    rm -f "$fifo"
-    mkfifo "$fifo"
-    # Run tail -f on the FIFO and pipe it to dialog's tailboxfifo
-    tail -f "$fifo" | dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxfifo /dev/stdin 20 80 || true &
-    local tailbox_pid=$!
-    # Run the script with forced line buffering so output is flushed live into the FIFO.
-    stdbuf -oL ./"$script_file" > "$fifo" 2>&1 || true
-    # Wait for the script to finish (ignoring non-zero exit codes)
-    wait || true
-    # Kill the tailbox process and remove the FIFO
-    kill $tailbox_pid 2>/dev/null || true
-    rm -f "$fifo"
+    local tmpfile
+    tmpfile=$(mktemp)
+    rm -f "$tmpfile"
+    touch "$tmpfile"
+    
+    # Run the sub-script in the background with forced line buffering.
+    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
+    local script_pid=$!
+    
+    # Loop until the script finishes, updating the infobox with the latest 20 lines.
+    while kill -0 "$script_pid" 2>/dev/null; do
+        output=$(tail -n 20 "$tmpfile")
+        dialog --clear --infobox "$output" 20 80
+        sleep 0.1
+    done
+    
+    # After the script finishes, display the final output.
+    dialog --clear --title "Final Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
+    rm -f "$tmpfile"
 }
 
 ########################################
