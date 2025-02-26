@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Version: 1.1.4 (Revised - Repository update reverted)
+# Version: 1.1.5 (Stable Release)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
-# and runs the selected sub-scripts with live auto-scrolling output.
+# and runs the selected sub-scripts sequentially with live auto-scrolling output.
 
 set -euo pipefail
 
@@ -130,15 +130,11 @@ run_script_live() {
 }
 
 ########################################
-# Run each selected setup script in order (top to bottom)
+# Run each selected setup script sequentially
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script_live "$script_file"
-    else
-        dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
-    fi
+    run_script_live "$script_file"
 done
 
 dialog --msgbox "All selected setup scripts have been executed." 6 50
