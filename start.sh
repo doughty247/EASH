@@ -38,6 +38,18 @@ cd "$TARGET_DIR"
 # Ensure the setup scripts are executable
 chmod +x immich_setup.sh nextcloud_setup.sh auto_updates_setup.sh
 
+# Additional check: verify that the required scripts exist
+verify_script() {
+    if [ ! -f "$1" ]; then
+        dialog --msgbox "Error: $1 not found in $TARGET_DIR" 6 50
+        exit 1
+    fi
+}
+
+verify_script "immich_setup.sh"
+verify_script "nextcloud_setup.sh"
+verify_script "auto_updates_setup.sh"
+
 # Debug info: show current directory contents
 echo "Current directory: $(pwd)"
 echo "Listing files:"
