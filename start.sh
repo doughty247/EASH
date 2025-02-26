@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Request sudo permission upfront
+sudo -v
+
 ########################################
 # Install Git if not already installed
 ########################################
@@ -35,20 +38,34 @@ fi
 # Change directory to the repository
 cd "$TARGET_DIR"
 
-# Ensure the setup scripts are executable
-chmod +x immich_setup.sh nextcloud_setup.sh auto_updates_setup.sh
+########################################
+# Define setup scripts and their descriptions
+########################################
+declare -A SETUP_SCRIPTS
+# Key = script filename, Value = description for the menu
+SETUP_SCRIPTS["immich_setup.sh"]="Immich Setup: Installs and configures Immich on Fedora using Docker Compose."
+SETUP_SCRIPTS["nextcloud_setup.sh"]="Nextcloud Setup: Installs and configures Nextcloud on your server using Docker Compose."
+SETUP_SCRIPTS["auto_updates_setup.sh"]="Auto Updates Setup: Configures Docker Watchtower and automatic system updates on Fedora."
 
-# Additional check: verify that the required scripts exist
-verify_script() {
-    if [ ! -f "$1" ]; then
-        dialog --msgbox "Error: $1 not found in $TARGET_DIR" 6 50
-        exit 1
+########################################
+# Build the dynamic menu and set executable permissions
+########################################
+menu_items=()
+declare -A SCRIPT_MAP  # maps option number to script filename
+option_counter=1
+
+for script in "${!SETUP_SCRIPTS[@]}"; do
+    if [ -f "$script" ]; then
+        chmod +x "$script"
+        menu_items+=("$option_counter" "${SETUP_SCRIPTS[$script]}")
+        SCRIPT_MAP["$option_counter"]="$script"
+        ((option_counter++))
     fi
-}
+done
 
-verify_script "immich_setup.sh"
-verify_script "nextcloud_setup.sh"
-verify_script "auto_updates_setup.sh"
+# Always add the exit option
+menu_items+=("$option_counter" "Exit")
+EXIT_OPTION="$option_counter"
 
 # Debug info: show current directory contents
 echo "Current directory: $(pwd)"
@@ -57,7 +74,7 @@ ls -l
 read -rp "Press Enter to continue..."
 
 ########################################
-# EASY TUI Menu: Effortless Automated Self-hosting for You
+# TUI Menu using Dialog: EASY (Effortless Automated Self-hosting for You)
 ########################################
 
 # Temporary file for capturing dialog output
@@ -72,7 +89,7 @@ RED=$(tput setaf 1)
 BOLD=$(tput bold)
 RESET=$(tput sgr0)
 
-# Function to print the EASY header in ASCII art
+# Function to print the EASY header in ASCII art (for non-dialog output)
 print_header() {
   clear
   echo "${MAGENTA}${BOLD}"
@@ -86,15 +103,12 @@ print_header() {
   echo
 }
 
-# Function to display the menu using dialog
+# Function to display the menu using Dialog
 show_menu() {
   dialog --clear --backtitle "EASY Menu" \
     --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
     --menu "Use the arrow keys to navigate. Select an option for more details." 16 80 4 \
-    1 "Immich Setup: Installs and configures Immich on Fedora." \
-    2 "Nextcloud Setup: Installs and configures Nextcloud on your server." \
-    3 "Auto Updates Setup: Sets up Docker Watchtower and automatic system updates." \
-    4 "Exit" 2>"$TEMP_FILE"
+    "${menu_items[@]}" 2>"$TEMP_FILE"
 }
 
 # Function to display a confirmation prompt for the selected option
@@ -108,54 +122,21 @@ confirm_choice() {
 while true; do
   show_menu
   choice=$(<"$TEMP_FILE")
-  case "$choice" in
-    1)
-      if confirm_choice "Immich Setup" "This script installs and configures Immich via Docker Compose on Fedora.
-It downloads the latest docker-compose file and example environment file, and sets up the Immich container."; then
-          if [[ -x "./immich_setup.sh" ]]; then
-              dialog --infobox "Running Immich Setup..." 4 50
-              ./immich_setup.sh
-          else
-              dialog --msgbox "Error: immich_setup.sh not found or not executable." 6 50
-          fi
-      else
-          dialog --msgbox "Cancelled Immich Setup." 4 40
-      fi
-      ;;
-    2)
-      if confirm_choice "Nextcloud Setup" "This script installs and configures Nextcloud on your server.
-It uses Docker Compose to set up Nextcloud with your desired configuration."; then
-          if [[ -x "./nextcloud_setup.sh" ]]; then
-              dialog --infobox "Running Nextcloud Setup..." 4 50
-              ./nextcloud_setup.sh
-          else
-              dialog --msgbox "Error: nextcloud_setup.sh not found or not executable." 6 50
-          fi
-      else
-          dialog --msgbox "Cancelled Nextcloud Setup." 4 40
-      fi
-      ;;
-    3)
-      if confirm_choice "Auto Updates Setup" "This script configures Docker Watchtower and sets up automatic system updates on Fedora.
-It uses dnf-automatic for daily security updates and schedules monthly full system upgrades."; then
-          if [[ -x "./auto_updates_setup.sh" ]]; then
-              dialog --infobox "Running Auto Updates Setup..." 4 50
-              ./auto_updates_setup.sh
-          else
-              dialog --msgbox "Error: auto_updates_setup.sh not found or not executable." 6 50
-          fi
-      else
-          dialog --msgbox "Cancelled Auto Updates Setup." 4 40
-      fi
-      ;;
-    4)
-      dialog --msgbox "Exiting. Have a great day!" 4 40
-      rm -f "$TEMP_FILE"
-      clear
-      exit 0
-      ;;
-    *)
-      dialog --msgbox "Invalid option. Please try again." 4 40
-      ;;
-  esac
+  if [ "$choice" == "$EXIT_OPTION" ]; then
+    dialog --msgbox "Exiting. Have a great day!" 4 40
+    rm -f "$TEMP_FILE"
+    clear
+    exit 0
+  elif [[ -n "${SCRIPT_MAP[$choice]:-}" ]]; then
+    script_file="${SCRIPT_MAP[$choice]}"
+    confirm_choice "$(basename "$script_file" .sh)" "${SETUP_SCRIPTS[$script_file]}"
+    if [ $? -eq 0 ]; then
+      dialog --infobox "Running $(basename "$script_file" .sh)..." 4 50
+      ./"$script_file"
+    else
+      dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
+    fi
+  else
+    dialog --msgbox "Invalid option. Please try again." 4 40
+  fi
 done
