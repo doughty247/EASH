@@ -53,7 +53,8 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions (about what the app does)
+# Define setup scripts and their descriptions
+# (Describes what each app does)
 ########################################
 declare -A SETUP_SCRIPTS
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
@@ -96,32 +97,37 @@ if [ -z "$result" ]; then
     exit 0
 fi
 
-# The result is a space-separated list of selected option numbers (e.g., "1 3")
-# Sort them numerically so they run in the order they appear in the checklist.
+# Parse and sort the result
 IFS=' ' read -r -a selected_options <<< "$result"
 IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Run each selected setup script in order (top to bottom) with live output inside TUI
+# Function to run a script with live output using a FIFO
+########################################
+run_script_live() {
+    local script_file="$1"
+    # Create a FIFO (named pipe)
+    fifo=$(mktemp -u)
+    mkfifo "$fifo"
+    # Launch dialog tailbox in background to display live output
+    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$fifo" 20 80 &
+    tailbox_pid=$!
+    # Run the script with forced line buffering, writing output to the FIFO.
+    stdbuf -oL ./"$script_file" > "$fifo" 2>&1
+    # When the script finishes, remove the FIFO.
+    rm "$fifo"
+    # Kill the tailbox if it's still running
+    kill $tailbox_pid 2>/dev/null || true
+}
+
+########################################
+# Run each selected setup script in order (top to bottom) with live output
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        tmpfile=$(mktemp)
-        # Run the script with forced line buffering, redirecting its output to tmpfile.
-        stdbuf -oL ./"$script_file" > "$tmpfile" 2>&1 &
-        script_pid=$!
-        # Launch dialog tailbox in background to show live updating output.
-        dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
-        tailbox_pid=$!
-        # Wait for the script to finish.
-        wait $script_pid
-        # Kill the background tailbox process.
-        kill $tailbox_pid 2>/dev/null || true
-        # Optionally, display any final output in a tailbox (press any key to close)
-        dialog --title "Final Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
-        rm -f "$tmpfile"
+        run_script_live "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
