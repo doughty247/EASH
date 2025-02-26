@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Version: 1.1.0
+# Version: 0.0.1
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools, clones/updates the EASY repo,
-# displays a checklist of setup options (Immich, Nextcloud, Auto Updates), and runs the selected sub‑scripts
-# in order (top to bottom) with scrolling output inside the TUI.
+# displays a checklist of setup options (Immich, Nextcloud, Auto Updates), and then runs the selected
+# sub-scripts in order (top to bottom) with scrolling output contained within the TUI.
 
 set -euo pipefail
 
@@ -106,19 +106,22 @@ unset IFS
 
 ########################################
 # Function to run a script with scrolling output effect
-# It runs the script with forced line buffering and, in a background loop,
-# repeatedly truncates the output file to only the last 20 lines.
+# It runs the script with forced line buffering and ensures the temporary
+# output file is freshly created before use.
 ########################################
 run_script_with_scrolling() {
     local script_file="$1"
     local tmpfile
     tmpfile=$(mktemp)
+    # Remove any stale file (shouldn't be needed, but to be safe)
+    rm -f "$tmpfile"
+    # Create an empty temporary file
+    touch "$tmpfile"
     
-    # Run the script with forced line buffering, appending its output to tmpfile
     stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
     local script_pid=$!
 
-    # In background, continuously truncate tmpfile to last 20 lines
+    # In the background, continuously truncate tmpfile to its last 20 lines
     (
       while kill -0 "$script_pid" 2>/dev/null; do
           tail -n 20 "$tmpfile" > "${tmpfile}.tmp" && mv "${tmpfile}.tmp" "$tmpfile"
@@ -127,7 +130,6 @@ run_script_with_scrolling() {
     ) &
     local trunc_pid=$!
 
-    # Show the output in a tailbox (appears scrolling)
     dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
     wait "$script_pid"
     kill "$trunc_pid" 2>/dev/null || true
