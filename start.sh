@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ########################################
-# Ensure Git is installed on Fedora
+# Install Git if not already installed
 ########################################
 if ! command -v git &>/dev/null; then
     echo "Git is not installed. Installing Git on Fedora..."
@@ -10,7 +10,7 @@ if ! command -v git &>/dev/null; then
 fi
 
 ########################################
-# Ensure Dialog is installed for TUI
+# Install Dialog if not already installed (for TUI)
 ########################################
 if ! command -v dialog &>/dev/null; then
     echo "Dialog is not installed. Installing Dialog on Fedora..."
@@ -21,9 +21,9 @@ fi
 # Clone or update the repository containing our scripts
 ########################################
 # Set your repository URL here (update as needed)
-REPO_URL="https://github.com/doughty247/EASY.git"
+REPO_URL="https://github.com/your-username/your-repo.git"
 # Set the target directory where the repository will be cloned
-TARGET_DIR="$HOME/EASY"
+TARGET_DIR="$HOME/EASY-scripts"
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Cloning repository from ${REPO_URL} into ${TARGET_DIR}..."
@@ -38,24 +38,47 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# EASY TUI Menu (Effortless Automated Self-hosting for You)
+# EASY TUI Menu: Effortless Automated Self-hosting for You
 ########################################
 
 # Temporary file for capturing dialog output
 TEMP_FILE=$(mktemp)
 
-# Function to display the main menu using dialog
+# ANSI Colors and formatting (used in messages printed by dialog)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+BLUE=$(tput setaf 4)
+MAGENTA=$(tput setaf 5)
+RED=$(tput setaf 1)
+BOLD=$(tput bold)
+RESET=$(tput sgr0)
+
+# Function to print the EASY header in ASCII art
+print_header() {
+  clear
+  echo "${MAGENTA}${BOLD}"
+  echo "    _____    _    ______   __
+  echo "   | ____|  / \  / ___\ \ / /
+  echo "   |  _|   / _ \ \___ \\ V /
+  echo "   | |___ / ___ \ ___) || |
+  echo "   |_____/_/   \_\____/ |_|   "
+  echo "   Effortless Automated Self-hosting for You"
+  echo "${RESET}"
+  echo
+}
+
+# Function to display the menu using dialog
 show_menu() {
   dialog --clear --backtitle "EASY Menu" \
     --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-    --menu "Use arrow keys to navigate. When you select an option, a description will be shown for confirmation." 15 70 4 \
-    1 "Immich Setup: Installs and configures Immich via Docker Compose on Fedora." \
-    2 "Auto Updates Setup: Configures Docker Watchtower and automatic system updates." \
-    3 "Nextcloud Setup: Installs and configures Nextcloud on your server." \
+    --menu "Use the arrow keys to navigate. Select an option for more details." 16 80 4 \
+    1 "Immich Setup: Installs and configures Immich on Fedora." \
+    2 "Nextcloud Setup: Installs and configures Nextcloud on your server." \
+    3 "Auto Updates Setup: Sets up Docker Watchtower and automatic system updates." \
     4 "Exit" 2>"$TEMP_FILE"
 }
 
-# Function to display a confirmation message for a given option
+# Function to display a confirmation prompt for the selected option
 confirm_choice() {
   local title="$1"
   local description="$2"
@@ -68,7 +91,7 @@ while true; do
   choice=$(<"$TEMP_FILE")
   case "$choice" in
     1)
-      if confirm_choice "Immich Setup" "This script installs and configures Immich on Fedora using Docker Compose."; then
+      if confirm_choice "Immich Setup" "This script installs and configures Immich via Docker Compose on Fedora.\n\nIt pulls the latest docker-compose file and example environment, and sets up the Immich container."; then
           if [[ -x "./immich_setup.sh" ]]; then
               dialog --infobox "Running Immich Setup..." 4 50
               ./immich_setup.sh
@@ -80,19 +103,7 @@ while true; do
       fi
       ;;
     2)
-      if confirm_choice "Auto Updates Setup" "This script configures Docker Watchtower and sets up automatic system updates (dnf-automatic and monthly full updates) on Fedora."; then
-          if [[ -x "./auto_updates_setup.sh" ]]; then
-              dialog --infobox "Running Auto Updates Setup..." 4 50
-              ./auto_updates_setup.sh
-          else
-              dialog --msgbox "Error: auto_updates_setup.sh not found or not executable." 6 50
-          fi
-      else
-          dialog --msgbox "Cancelled Auto Updates Setup." 4 40
-      fi
-      ;;
-    3)
-      if confirm_choice "Nextcloud Setup" "This script installs and configures Nextcloud on your server."; then
+      if confirm_choice "Nextcloud Setup" "This script installs and configures Nextcloud on your server.\n\nIt sets up Nextcloud using the provided Docker Compose configuration."; then
           if [[ -x "./nextcloud_setup.sh" ]]; then
               dialog --infobox "Running Nextcloud Setup..." 4 50
               ./nextcloud_setup.sh
@@ -101,6 +112,18 @@ while true; do
           fi
       else
           dialog --msgbox "Cancelled Nextcloud Setup." 4 40
+      fi
+      ;;
+    3)
+      if confirm_choice "Auto Updates Setup" "This script configures Docker Watchtower and sets up automatic system updates on Fedora.\n\nIt uses dnf-automatic for daily security updates and schedules monthly full system upgrades."; then
+          if [[ -x "./auto_updates_setup.sh" ]]; then
+              dialog --infobox "Running Auto Updates Setup..." 4 50
+              ./auto_updates_setup.sh
+          else
+              dialog --msgbox "Error: auto_updates_setup.sh not found or not executable." 6 50
+          fi
+      else
+          dialog --msgbox "Cancelled Auto Updates Setup." 4 40
       fi
       ;;
     4)
