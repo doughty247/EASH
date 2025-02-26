@@ -49,11 +49,10 @@ else
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
 
-# Change directory to the repository
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions (about what the app does)
+# Define setup scripts and their descriptions (what each app does)
 ########################################
 declare -A SETUP_SCRIPTS
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
@@ -76,42 +75,55 @@ for script in "${!SETUP_SCRIPTS[@]}"; do
     fi
 done
 
-# If no setup scripts found, exit.
 if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
     dialog --msgbox "No setup scripts found. Exiting." 6 50
     exit 1
 fi
 
 ########################################
-# Display a checklist for all options using dialog
+# Display checklist using dialog
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup options you want to run:" \
-  16 80 4 "${checklist_items[@]}" 2>&1 >/dev/tty)
+  --checklist "Select the setup options you want to run (they will execute from top to bottom):" \
+  16 80 4 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
-# If user cancels or nothing selected, exit.
 if [ -z "$result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
-# Parse and sort the selected option numbers (e.g., "1 3")
 IFS=' ' read -r -a selected_options <<< "$result"
 IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script and capture its output (non-live)
+# Function to run a script with scrolling output effect
+# It runs the script with forced line buffering and, in a background loop,
+# repeatedly truncates the output file to only the last 20 lines.
 ########################################
-run_script() {
+run_script_with_scrolling() {
     local script_file="$1"
     local tmpfile
     tmpfile=$(mktemp)
-    # Run the script with forced line buffering and capture output
-    stdbuf -oL ./"$script_file" > "$tmpfile" 2>&1
-    # Show the output in a textbox dialog
-    dialog --title "Output: $(basename "$script_file" .sh)" --textbox "$tmpfile" 20 80
+    
+    # Run the script with forced line buffering, appending its output to tmpfile
+    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
+    local script_pid=$!
+
+    # In background, continuously truncate tmpfile to last 20 lines
+    (
+      while kill -0 "$script_pid" 2>/dev/null; do
+          tail -n 20 "$tmpfile" > "${tmpfile}.tmp" && mv "${tmpfile}.tmp" "$tmpfile"
+          sleep 0.5
+      done
+    ) &
+    local trunc_pid=$!
+
+    # Show the output in a tailbox (not live updating, but appears scrolling)
+    dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
+    wait "$script_pid"
+    kill "$trunc_pid" 2>/dev/null || true
     rm -f "$tmpfile"
 }
 
@@ -121,7 +133,7 @@ run_script() {
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script "$script_file"
+        run_script_with_scrolling "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
