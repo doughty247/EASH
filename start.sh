@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-########################################
 # Check if OS is Fedora
-########################################
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     if [ "$ID" != "fedora" ]; then
@@ -145,7 +143,8 @@ while true; do
     confirm_choice "$(basename "$script_file" .sh)" "${SETUP_SCRIPTS[$script_file]}"
     if [ $? -eq 0 ]; then
       dialog --infobox "Running $(basename "$script_file" .sh)..." 4 50
-      ./"$script_file"
+      # Run the selected script in a subshell to ensure control returns to this menu even if it calls exit.
+      ( ./"$script_file" )
     else
       dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
