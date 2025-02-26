@@ -49,7 +49,6 @@ else
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
 
-# Change directory to the repository
 cd "$TARGET_DIR"
 
 ########################################
@@ -82,8 +81,62 @@ if [ "${#SCRIPT_MAP[@]}" -eq 0 ]; then
 fi
 
 ########################################
-# Display a checklist for all options using dialog
+# Display checklist using dialog
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select th
+  --checklist "Select the setup options you want to run (they will execute from top to bottom):" \
+  16 80 4 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+
+if [ -z "$result" ]; then
+    dialog --msgbox "No options selected. Exiting." 6 50
+    exit 0
+fi
+
+IFS=' ' read -r -a selected_options <<< "$result"
+IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
+unset IFS
+
+########################################
+# Function to run a script with scrolling output effect
+# It runs the script with forced line buffering and, in a background loop,
+# repeatedly truncates the output file to only the last 20 lines.
+########################################
+run_script_with_scrolling() {
+    local script_file="$1"
+    local tmpfile
+    tmpfile=$(mktemp)
+    
+    # Run the script with forced line buffering, appending its output to tmpfile
+    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
+    local script_pid=$!
+
+    # In background, continuously truncate tmpfile to last 20 lines
+    (
+      while kill -0 "$script_pid" 2>/dev/null; do
+          tail -n 20 "$tmpfile" > "${tmpfile}.tmp" && mv "${tmpfile}.tmp" "$tmpfile"
+          sleep 0.5
+      done
+    ) &
+    local trunc_pid=$!
+
+    # Show the output in a tailbox (not live updating, but appears scrolling)
+    dialog --title "Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
+    wait "$script_pid"
+    kill "$trunc_pid" 2>/dev/null || true
+    rm -f "$tmpfile"
+}
+
+########################################
+# Run each selected setup script in order (top to bottom)
+########################################
+for opt in "${sorted[@]}"; do
+    script_file="${SCRIPT_MAP[$opt]}"
+    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
+        run_script_with_scrolling "$script_file"
+    else
+        dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
+    fi
+done
+
+dialog --msgbox "All selected setup scripts have been executed." 6 50
