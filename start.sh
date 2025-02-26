@@ -87,7 +87,7 @@ fi
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup options you want to run (they will execute from top to bottom):" \
+  --checklist "Select the setup options you want to run:" \
   16 80 4 "${checklist_items[@]}" 2>&1 >/dev/tty)
 
 # If user cancels or nothing selected, exit.
@@ -102,33 +102,26 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using a FIFO
+# Function to run a script and capture its output (non-live)
 ########################################
-run_script_live() {
+run_script() {
     local script_file="$1"
-    local fifo_file
-    fifo_file=$(mktemp -u)
-    mkfifo "$fifo_file"
-    
-    # Launch dialog tailbox in background to display live output.
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$fifo_file" 20 80 &
-    local tailbox_pid=$!
-    
-    # Run the script with forced line buffering, writing output to the FIFO.
-    stdbuf -oL ./"$script_file" > "$fifo_file" 2>&1
-    # When the script completes, remove the FIFO.
-    rm "$fifo_file"
-    # Kill the tailbox if it's still running.
-    kill $tailbox_pid 2>/dev/null || true
+    local tmpfile
+    tmpfile=$(mktemp)
+    # Run the script with forced line buffering and capture output
+    stdbuf -oL ./"$script_file" > "$tmpfile" 2>&1
+    # Show the output in a textbox dialog
+    dialog --title "Output: $(basename "$script_file" .sh)" --textbox "$tmpfile" 20 80
+    rm -f "$tmpfile"
 }
 
 ########################################
-# Run each selected setup script in order (top to bottom) with live output
+# Run each selected setup script in order (top to bottom)
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script_live "$script_file"
+        run_script "$script_file"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
     fi
