@@ -45,8 +45,8 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "$REPO_URL" "$TARGET_DIR"
 else
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
-    cd "$TARGET_DIR"
-    git pull --rebase
+    sudo rm -rf "$TARGET_DIR"
+    git clone "$REPO_URL" "$TARGET_DIR"
 fi
 
 # Change directory to the repository
