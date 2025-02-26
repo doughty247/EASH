@@ -53,20 +53,6 @@ RED=$(tput setaf 1)
 BOLD=$(tput bold)
 RESET=$(tput sgr0)
 
-# Function to print the EASY header in ASCII art
-print_header() {
-  clear
-  echo "${MAGENTA}${BOLD}"
-  echo "    _____    _    ______   __    "
-  echo "   | ____|  / \  / ___\ \ / /    "
-  echo "   |  _|   / _ \ \___ \\ V /     "
-  echo "   | |___ / ___ \ ___) || |      "
-  echo "   |_____/_/   \_\____/ |_|      "
-  echo "   Effortless Automated Self-hosting for You"
-  echo "${RESET}"
-  echo
-}
-
 # Function to display the menu using dialog
 show_menu() {
   dialog --clear --backtitle "EASY Menu" \
