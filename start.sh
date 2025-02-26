@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Version: 1.1.6 (Stable Release)
+# Version: 1.1.6
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
 # and runs the selected sub-scripts sequentially with live auto-scrolling output.
-# ANSI escape sequences are removed so that subscript output remains confined within the TUI box.
+# ANSI escape sequences are removed to keep output confined within the TUI box.
 
 set -euo pipefail
 
@@ -114,8 +114,8 @@ run_script_live() {
     local tmpfile
     tmpfile=$(mktemp)
     
-    # Run the subscript, filtering out ANSI escape sequences using col -b, and tee output to a temporary file.
-    (stdbuf -oL ./"$script_file" | col -b | tee "$tmpfile") &
+    # Run the subscript, filtering ANSI escape sequences with sed, and tee its output to a temporary file.
+    (stdbuf -oL ./"$script_file" | sed -r 's/\x1B\[[0-9;]*[mK]//g' | tee "$tmpfile") &
     local script_pid=$!
     
     # Launch dialog's tailbox in background to display the log with auto-scrolling.
