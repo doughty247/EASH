@@ -15,6 +15,7 @@ fi
 
 # Request sudo permission upfront
 sudo -v
+sudo rm -rf /EASY
 
 ########################################
 # Install Git if not already installed
