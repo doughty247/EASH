@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Version: 1.1.4 (Revised - Repository update reverted)
+# Version: 1.1.4
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
-# and runs the selected sub-scripts with live auto-scrolling output.
+# and then runs the selected sub-scripts sequentially.
+# Before running each subscript, the terminal is cleared.
 
 set -euo pipefail
 
@@ -106,39 +107,28 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live auto-scrolling output using dialog --tailboxbg
+# Function to run a script with output printed to the terminal
+# Clears the terminal before running the subscript and waits for user input between sub-scripts.
 ########################################
 run_script_live() {
     local script_file="$1"
-    local tmpfile
-    tmpfile=$(mktemp)
-    
-    # Run the subscript, teeing its output to a temporary file.
-    (stdbuf -oL ./"$script_file" | tee "$tmpfile") &
-    local script_pid=$!
-    
-    # Launch dialog's tailbox in background to auto-scroll new lines.
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
-    local tailbox_pid=$!
-    
-    # Wait for the subscript to finish.
-    wait "$script_pid"
-    
-    # Kill the tailbox dialog once done.
-    kill "$tailbox_pid" 2>/dev/null || true
-    rm -f "$tmpfile"
+    clear
+    echo "Running $(basename "$script_file" .sh)..."
+    echo "----------------------------------------"
+    stdbuf -oL ./"$script_file"
+    echo "----------------------------------------"
+    echo "$(basename "$script_file" .sh) completed."
+    echo "Press Enter to continue..."
+    read -r
 }
 
 ########################################
-# Run each selected setup script in order (top to bottom)
+# Run each selected setup script sequentially
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        run_script_live "$script_file"
-    else
-        dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
-    fi
+    run_script_live "$script_file"
 done
 
-dialog --msgbox "All selected setup scripts have been executed." 6 50
+clear
+echo "All selected setup scripts have been executed."
