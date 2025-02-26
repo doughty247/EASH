@@ -103,19 +103,22 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Run each selected setup script in order (top to bottom)
+# Run each selected setup script in order (top to bottom) and display live output
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    # Confirm the user's choice in a dialog
+    # Confirm the user's choice
     if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
-        # Create a temporary file for capturing output
+        # Create a temporary file for live output
         tmpfile=$(mktemp)
-        dialog --infobox "Running $(basename "$script_file" .sh)..." 4 50
-        # Run the script and capture its output
-        ( ./"$script_file" ) > "$tmpfile" 2>&1
-        # Display the output in a textbox dialog
-        dialog --title "Output: $(basename "$script_file" .sh)" --textbox "$tmpfile" 20 80
+        dialog --infobox "Running $(basename "$script_file" .sh)...\nLive output will appear below." 4 60
+        # Run the script in background, directing its output to the temp file
+        ( ./"$script_file" ) > "$tmpfile" 2>&1 &
+        pid=$!
+        # Display the output live in a tailbox; user can press any key to exit the box once finished
+        dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$tmpfile" 20 80
+        # Wait for the script to complete
+        wait $pid
         rm -f "$tmpfile"
     else
         dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
