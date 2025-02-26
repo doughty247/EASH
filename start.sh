@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Version: 0.0.5
+# Version: 0.0.7
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo, displays a checklist of setup options
-# (Immich, Nextcloud, Auto Updates), and runs the selected sub-scripts
-# in order (top to bottom) with live output updated every line within the TUI.
+# (Immich, Nextcloud, Auto Updates), and then runs the selected sub‑scripts
+# in order (top to bottom) with live output updating instantly for every new line.
 
 set -euo pipefail
 
@@ -106,29 +106,22 @@ IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
-# Function to run a script with live output using a temporary file and tail -F
+# Function to run a script with live output using a FIFO and tail -f
 ########################################
 run_script_live() {
     local script_file="$1"
-    local tmpfile
-    tmpfile=$(mktemp)
-    # Remove any stale temporary file and create an empty file.
-    rm -f "$tmpfile"
-    touch "$tmpfile"
-    
-    # Run the script with forced line buffering so output is written live to tmpfile.
-    stdbuf -oL ./"$script_file" >> "$tmpfile" 2>&1 &
-    local script_pid=$!
-    
-    # Use tail -F to continuously output the last 20 lines from tmpfile.
-    tail -F -n 20 "$tmpfile" | dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox /dev/stdin 20 80 &
-    local tail_pid=$!
-    
-    # Wait for the script to finish.
-    wait "$script_pid"
-    # Kill the tail process after script completion.
-    kill $tail_pid 2>/dev/null || true
-    rm -f "$tmpfile"
+    local fifo="/tmp/$(basename "$script_file").fifo"
+    # Delete any stale FIFO file before creating a new one.
+    rm -f "$fifo"
+    mkfifo "$fifo"
+    # Run tail -f on the FIFO and pipe to dialog's tailbox.
+    tail -f "$fifo" | dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox /dev/stdin 20 80 &
+    local tailbox_pid=$!
+    # Run the sub-script with forced line buffering; output goes into the FIFO.
+    stdbuf -oL ./"$script_file" > "$fifo" 2>&1
+    # When the sub-script finishes, kill the tailbox and remove the FIFO.
+    kill $tailbox_pid 2>/dev/null || true
+    rm -f "$fifo"
 }
 
 ########################################
