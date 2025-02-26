@@ -6,9 +6,10 @@
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # dynamically builds a checklist based on all files in the EASY directory
 # that end with "_setup.sh" (with no descriptions), and runs the selected
-# sub-scripts sequentially. Before running each subscript, the terminal
-# (and its scrollback) is fully cleared.
-
+# sub-scripts sequentially. Before running each subscript, the terminal (and its
+# scrollback) is fully cleared. After all selected scripts have been executed,
+# a TUI message box is shown.
+#
 set -euo pipefail
 
 # Request sudo permission upfront
@@ -55,6 +56,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "$REPO_URL" "$TARGET_DIR"
 else
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
+    cd "$HOME"                # move out of the repository directory
     sudo rm -rf "$TARGET_DIR"
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
@@ -62,10 +64,10 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Dynamically build checklist based on files ending with _setup.sh
+# Dynamically build checklist from files ending with _setup.sh
 ########################################
 checklist_items=()
-declare -A SCRIPT_MAP  # maps option number to script filename
+declare -A SCRIPT_MAP
 option_counter=1
 
 for script in *_setup.sh; do
@@ -133,4 +135,5 @@ for opt in "${sorted[@]}"; do
 done
 
 clear_screen
-echo "All selected setup scripts have been executed."
+dialog --msgbox "All selected setup scripts have been executed." 6 50
+clear_screen
