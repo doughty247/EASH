@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Version: 1.1.6
+# Version: 1.1.4 (Revised - Repository update reverted)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # displays a checklist of setup options (Immich, Nextcloud, Auto Updates),
-# and runs the selected sub-scripts sequentially with live auto-scrolling output.
-# ANSI escape sequences are removed to keep output confined within the TUI box.
+# and runs the selected sub-scripts with live auto-scrolling output.
 
 set -euo pipefail
 
@@ -114,11 +113,11 @@ run_script_live() {
     local tmpfile
     tmpfile=$(mktemp)
     
-    # Run the subscript, filtering ANSI escape sequences with sed, and tee its output to a temporary file.
-    (stdbuf -oL ./"$script_file" | sed -r 's/\x1B\[[0-9;]*[mK]//g' | tee "$tmpfile") &
+    # Run the subscript, teeing its output to a temporary file.
+    (stdbuf -oL ./"$script_file" | tee "$tmpfile") &
     local script_pid=$!
     
-    # Launch dialog's tailbox in background to display the log with auto-scrolling.
+    # Launch dialog's tailbox in background to auto-scroll new lines.
     dialog --title "Live Output: $(basename "$script_file" .sh)" --tailboxbg "$tmpfile" 20 80 &
     local tailbox_pid=$!
     
@@ -131,11 +130,15 @@ run_script_live() {
 }
 
 ########################################
-# Run each selected setup script sequentially
+# Run each selected setup script in order (top to bottom)
 ########################################
 for opt in "${sorted[@]}"; do
     script_file="${SCRIPT_MAP[$opt]}"
-    run_script_live "$script_file"
+    if dialog --clear --title "$(basename "$script_file" .sh)" --yesno "${SETUP_SCRIPTS[$script_file]}\n\nProceed with this setup?" 10 70; then
+        run_script_live "$script_file"
+    else
+        dialog --msgbox "Cancelled $(basename "$script_file" .sh)." 4 40
+    fi
 done
 
 dialog --msgbox "All selected setup scripts have been executed." 6 50
