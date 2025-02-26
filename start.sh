@@ -23,7 +23,7 @@ fi
 # Set your repository URL here (update as needed)
 REPO_URL="https://github.com/doughty247/EASY.git"
 # Set the target directory where the repository will be cloned
-TARGET_DIR="$HOME/EASY-scripts"
+TARGET_DIR="$HOME/EASY"
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Cloning repository from ${REPO_URL} into ${TARGET_DIR}..."
