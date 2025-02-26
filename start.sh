@@ -53,8 +53,7 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Define setup scripts and their descriptions
-# (Describes what each app does)
+# Define setup scripts and their descriptions (about what the app does)
 ########################################
 declare -A SETUP_SCRIPTS
 SETUP_SCRIPTS["immich_setup.sh"]="Immich: Self-hosted photo & video backup & management."
@@ -88,7 +87,7 @@ fi
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup options you want to run:" \
+  --checklist "Select the setup options you want to run (they will execute from top to bottom):" \
   16 80 4 "${checklist_items[@]}" 2>&1 >/dev/tty)
 
 # If user cancels or nothing selected, exit.
@@ -97,7 +96,7 @@ if [ -z "$result" ]; then
     exit 0
 fi
 
-# Parse and sort the result
+# Parse and sort the selected option numbers (e.g., "1 3")
 IFS=' ' read -r -a selected_options <<< "$result"
 IFS=$'\n' sorted=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
@@ -107,17 +106,19 @@ unset IFS
 ########################################
 run_script_live() {
     local script_file="$1"
-    # Create a FIFO (named pipe)
-    fifo=$(mktemp -u)
-    mkfifo "$fifo"
-    # Launch dialog tailbox in background to display live output
-    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$fifo" 20 80 &
-    tailbox_pid=$!
+    local fifo_file
+    fifo_file=$(mktemp -u)
+    mkfifo "$fifo_file"
+    
+    # Launch dialog tailbox in background to display live output.
+    dialog --title "Live Output: $(basename "$script_file" .sh)" --tailbox "$fifo_file" 20 80 &
+    local tailbox_pid=$!
+    
     # Run the script with forced line buffering, writing output to the FIFO.
-    stdbuf -oL ./"$script_file" > "$fifo" 2>&1
-    # When the script finishes, remove the FIFO.
-    rm "$fifo"
-    # Kill the tailbox if it's still running
+    stdbuf -oL ./"$script_file" > "$fifo_file" 2>&1
+    # When the script completes, remove the FIFO.
+    rm "$fifo_file"
+    # Kill the tailbox if it's still running.
     kill $tailbox_pid 2>/dev/null || true
 }
 
