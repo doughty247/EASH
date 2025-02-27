@@ -246,7 +246,7 @@ run_script_live() {
             echo "$percent"
             sleep 0.5
           done
-        ) | dialog --gauge "Running $display_name..." 6 60 0
+        ) | dialog --gauge "Setting up $display_name..." 6 60 0
         wait "$script_pid"
         status=$?
         rm -f "$temp_file"
@@ -287,8 +287,11 @@ done
 ########################################
 # Display final report using dialog checklist (read-only report)
 ########################################
-dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_items[@]} "${report_items[@]}"
+dialog --checklist "Installation Report:" 16 80 ${#report_items[@]} "${report_items[@]}"
 
 clear_screen
-dialog --msgbox "All selected setup scripts have been executed." 6 50
+dialog --msgbox "All Done!" 6 50
 clear_screen
+wait 1
+clear
+exit
