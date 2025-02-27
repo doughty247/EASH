@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.12 Stable Release (with Separate Advanced Options Screen)
+# Version: 1.1.13 Stable Release
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,14 +8,14 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# The main checklist now includes an extra toggle "Enable Advanced Options" (default off).
-# If enabled, a separate Advanced Options screen is shown to toggle "Show Output" (default off).
+# The main checklist includes an extra toggle "Enable Advanced Options" (default off)
+# that, if selected, leads to a second dialog to toggle "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
 # listing each subscript with a checkbox indicating success.
 #
-set -uo pipefail  # -e removed so subscript failures do not abort the main script
+set -uo pipefail  # -e removed so that subscript failures do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -105,7 +105,7 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items with sequential option numbers (default state "on").
+# Build checklist items with sequential numeric keys (default state "on").
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -133,7 +133,7 @@ if [ -z "$main_result" ]; then
     exit 0
 fi
 
-# Process results: Numeric keys correspond to subscript selections; if ADV_ENABLE is selected, mark advanced mode as enabled.
+# Process main_result: Numeric keys correspond to subscript selections; if ADV_ENABLE is selected, set ADV_MODE=1.
 ADV_MODE=0
 selected_numeric=()
 IFS=' ' read -r -a main_opts <<< "$main_result"
@@ -147,7 +147,16 @@ done
 IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
 
-# If Advanced Mode is enabled, display the advanced options screen.
+# Save constant copies for final reporting.
+readonly FINAL_SORTED_OPTIONS=("${sorted_options[@]}")
+declare -A FINAL_OPTION_TO_NAME
+for key in "${!OPTION_TO_NAME[@]}"; do
+    FINAL_OPTION_TO_NAME["$key"]="${OPTION_TO_NAME[$key]}"
+done
+
+########################################
+# If Advanced Mode is enabled, display a second dialog for advanced options.
+########################################
 SHOW_OUTPUT=0
 if [ "$ADV_MODE" -eq 1 ]; then
     adv_result=$(dialog --clear --backtitle "Advanced Options" \
@@ -219,8 +228,8 @@ done
 # Build report items for final TUI report (default to on if no status recorded)
 ########################################
 report_items=()
-for opt in "${sorted_options[@]}"; do
-    display_name="${OPTION_TO_NAME[$opt]}"
+for opt in "${FINAL_SORTED_OPTIONS[@]}"; do
+    display_name="${FINAL_OPTION_TO_NAME[$opt]}"
     status=${REPORT["$display_name"]:-"on"}
     report_items+=("$display_name" "$display_name" "$status")
 done
