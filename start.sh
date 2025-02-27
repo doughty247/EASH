@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Final Report, default subscript selection on)
+# Version: 1.1.11 Stable Release (with Final Report and Advanced Options header)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -7,8 +7,9 @@
 # dynamically builds a checklist based on all files in the EASY directory
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
-# The main checklist includes an advanced toggle for "Show Output" (default off)
-# and all subscript items are enabled by default.
+# The main checklist now includes a subcategory titled "Advanced Options:"
+# followed by a toggle for "Show Output" (default off).
+# All subscript items are enabled by default.
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -114,7 +115,13 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append advanced option toggle for "Show Output" (default off).
+# Append a header item for Advanced Options (non-selectable) and then the advanced toggle.
+# We'll mark the header item with a tag that starts with "HDR_" so we can ignore it.
+header_tag="HDR_ADV_OPTIONS"
+header_label="Advanced Options:"
+# Since dialog doesn't support truly non-selectable items, we mark it as off and ignore it later.
+checklist_items+=("$header_tag" "$header_label" "off")
+# Append the "Show Output" toggle with tag ADV_SHOW_OUTPUT.
 advanced_tag="ADV_SHOW_OUTPUT"
 advanced_label="Show Output"
 checklist_items+=("$advanced_tag" "$advanced_label" "off")
@@ -125,19 +132,22 @@ checklist_items+=("$advanced_tag" "$advanced_label" "off")
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
   --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  16 80 6 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+  18 80 8 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
-# Process result: if ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
+# Process result:
+# Ignore header items. If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
 SHOW_OUTPUT=0
 selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$result"
 for opt in "${selected_options[@]}"; do
-    if [ "$opt" == "$advanced_tag" ]; then
+    if [[ "$opt" == "$header_tag" ]]; then
+        continue
+    elif [ "$opt" == "$advanced_tag" ]; then
         SHOW_OUTPUT=1
     else
         selected_numeric+=("$opt")
@@ -163,7 +173,6 @@ clear_screen() {
 # Clears the terminal before running.
 # If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, they're hidden.
 # The exit code is captured and stored in REPORT.
-# Uses to_title to determine display name for consistency.
 ########################################
 run_script_live() {
     local script_file="$1"
