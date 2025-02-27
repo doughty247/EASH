@@ -222,7 +222,7 @@ run_script_live() {
     local display_name
     display_name=$(to_title "$script_file")
     clear_screen
-    echo "Running $display_name..."
+    echo "Setting up $display_name..."
     echo "----------------------------------------"
     local status=0
     if [ "$SHOW_OUTPUT" -eq 1 ]; then
