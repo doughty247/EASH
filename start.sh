@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Separate Advanced Options)
+# Version: 1.1.11 Stable Release (with Advanced Mode Option)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,8 +8,8 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# After the main checklist, a separate prompt asks whether to enable Advanced Mode.
-# If enabled, a second dialog appears with advanced options ("Show Output", default off).
+# After the main checklist, a separate Advanced Options prompt appears.
+# If Advanced Mode is enabled, you can toggle "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -135,16 +135,10 @@ unset IFS
 ########################################
 # Prompt for Advanced Mode
 ########################################
-adv_mode=$(dialog --clear --backtitle "Advanced Options" \
-  --title "Advanced Options" \
-  --yesno "Do you want to enable Advanced Mode?" 8 60 3>&1 1>&2 2>&3; echo $?)
-
+dialog --clear --backtitle "Advanced Options" --title "Advanced Options" --yesno "Do you want to enable Advanced Mode?" 8 60
+adv_mode=$?
 if [ "$adv_mode" -eq 0 ]; then
-    # If yes, display a checklist for advanced options (currently only "Show Output")
-    adv_result=$(dialog --clear --backtitle "Advanced Options" \
-      --title "Advanced Options" \
-      --checklist "Advanced Options:" 8 60 1 \
-      "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
+    adv_result=$(dialog --clear --backtitle "Advanced Options" --title "Advanced Options" --checklist "Advanced Options:" 8 60 1 "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
     if [[ "$adv_result" == *"ADV_SHOW_OUTPUT"* ]]; then
         SHOW_OUTPUT=1
     else
