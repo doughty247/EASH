@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Integrated Advanced Options)
+# Version: 1.1.12 Stable Release (with Separate Advanced Options Screen)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,14 +8,14 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# The main checklist now includes, at the bottom, a toggle labeled "Show Output"
-# (default off) as an advanced option.
+# The main checklist now includes an extra toggle "Enable Advanced Options" (default off).
+# If enabled, a separate Advanced Options screen is shown to toggle "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
 # listing each subscript with a checkbox indicating success.
 #
-set -uo pipefail  # -e removed so that subscript failures do not abort the main script
+set -uo pipefail  # -e removed so subscript failures do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -105,7 +105,7 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items with sequential option numbers (default state "on")
+# Build checklist items with sequential option numbers (default state "on").
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -115,17 +115,17 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append the advanced option toggle for "Show Output" (using key "SHOW_OUTPUT", label "Show Output", default off)
-advanced_key="SHOW_OUTPUT"
-advanced_label="Show Output"
-checklist_items+=("$advanced_key" "$advanced_label" "off")
+# Append extra toggle for enabling advanced options (key: ADV_ENABLE, label: "Enable Advanced Options", default off).
+advanced_toggle="ADV_ENABLE"
+advanced_label="Enable Advanced Options"
+checklist_items+=("$advanced_toggle" "$advanced_label" "off")
 
 ########################################
-# Display main checklist using dialog (with integrated advanced option)
+# Display main checklist using dialog (subscript items + advanced toggle)
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup scripts you want to run (they will execute from top to bottom). Advanced options are included below." \
+  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
   20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$main_result" ]; then
@@ -133,20 +133,31 @@ if [ -z "$main_result" ]; then
     exit 0
 fi
 
-# Process result:
-# Numeric keys correspond to subscript selections; key "SHOW_OUTPUT" corresponds to the advanced option.
-SHOW_OUTPUT=0
+# Process results: Numeric keys correspond to subscript selections; if ADV_ENABLE is selected, mark advanced mode as enabled.
+ADV_MODE=0
 selected_numeric=()
-IFS=' ' read -r -a selected_options <<< "$main_result"
-for opt in "${selected_options[@]}"; do
-    if [ "$opt" == "$advanced_key" ]; then
-        SHOW_OUTPUT=1
+IFS=' ' read -r -a main_opts <<< "$main_result"
+for opt in "${main_opts[@]}"; do
+    if [ "$opt" == "$advanced_toggle" ]; then
+        ADV_MODE=1
     else
         selected_numeric+=("$opt")
     fi
 done
 IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
+
+# If Advanced Mode is enabled, display the advanced options screen.
+SHOW_OUTPUT=0
+if [ "$ADV_MODE" -eq 1 ]; then
+    adv_result=$(dialog --clear --backtitle "Advanced Options" \
+      --title "Advanced Options" \
+      --checklist "Select Advanced Options:" 8 60 1 \
+      "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
+    if [[ "$adv_result" == *"SHOW_OUTPUT"* ]]; then
+        SHOW_OUTPUT=1
+    fi
+fi
 
 ########################################
 # Global associative array to hold subscript results (on = success, off = failure)
