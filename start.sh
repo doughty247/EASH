@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Version: 1.1.15 Stable Release
+# Version: 1.1.16 Stable Release
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
-# and dynamically builds a checklist based on all files in the EASY directory
-# ending with "_setup.sh". The displayed names have the suffix removed,
+# dynamically builds a checklist based on all files in the EASY directory
+# that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
-#
 # All subscript items are enabled by default.
-# The main checklist includes an extra toggle "Enable Advanced Options" (default off).
-# If that toggle is selected, a second dialog appears letting you toggle "Show Output" (default off).
-# Once selections are made, the chosen subscripts are run sequentially.
-# After running all subscripts, the script goes straight to displaying a final
-# Installation Report showing a checklist of subscript names with checkboxes indicating success.
+# The main checklist includes an extra toggle "Enable Advanced Options".
+# If enabled, a separate dialog appears to toggle "Show Output" (default off).
+# When running a selected subscript:
+#   - If Show Output is enabled, output is printed normally.
+#   - If disabled, the subscript is run in trace mode and a progress gauge is displayed,
+#     updating as the number of executed lines (non-comment, non-blank) increases.
+# After all selected scripts have been executed, a final TUI report is shown
+# listing each subscript with a checkbox indicating success.
 #
-set -uo pipefail  # Do not use -e so failures in subscripts do not abort the main script
+set -uo pipefail  # -e removed so that failures in subscripts do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -43,7 +45,7 @@ if ! command -v git &>/dev/null; then
 fi
 
 ########################################
-# Install Dialog if not already installed
+# Install Dialog if not already installed (for TUI)
 ########################################
 if ! command -v dialog &>/dev/null; then
     echo "Dialog is not installed. Installing Dialog on Fedora..."
@@ -68,8 +70,8 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Function to convert filename to display name
-# (removes "_setup.sh", replaces underscores with spaces, capitalizes each word)
+# Function: Convert filename to display name
+# Removes "_setup.sh", replaces underscores with spaces, and capitalizes each word.
 ########################################
 to_title() {
     local base="${1%_setup.sh}"
@@ -79,9 +81,9 @@ to_title() {
 }
 
 ########################################
-# Build checklist from files ending with _setup.sh
+# Dynamically build checklist from files ending with _setup.sh
 ########################################
-declare -A SCRIPT_MAPPING
+declare -A SCRIPT_MAPPING  # Maps display name to script filename
 display_names=()
 for script in *_setup.sh; do
     if [ -f "$script" ]; then
@@ -91,16 +93,14 @@ for script in *_setup.sh; do
         SCRIPT_MAPPING["$title"]="$script"
     fi
 done
-
 if [ "${#display_names[@]}" -eq 0 ]; then
     dialog --msgbox "No setup scripts found. Exiting." 6 50
     exit 1
 fi
-
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build main checklist items (default state "on")
+# Build checklist items for subscript selections (default state "on")
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -110,24 +110,22 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append advanced toggle for enabling advanced options (key ADV_ENABLE, label "Enable Advanced Options", default off)
+# Append advanced toggle for enabling advanced mode (key ADV_ENABLE, label "Enable Advanced Options", default off)
 advanced_toggle="ADV_ENABLE"
 advanced_label="Enable Advanced Options"
 checklist_items+=("$advanced_toggle" "$advanced_label" "off")
 
 ########################################
-# Display main checklist dialog
+# Display main checklist using dialog (subscript items + advanced toggle)
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
   --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
   20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
-
 if [ -z "$main_result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
-
 ADV_MODE=0
 selected_numeric=()
 IFS=' ' read -r -a main_opts <<< "$main_result"
@@ -142,7 +140,7 @@ IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
 
 ########################################
-# If Advanced Mode is enabled, show advanced options dialog;
+# If Advanced Mode is enabled, display advanced options dialog;
 # if cancelled, re-display main menu.
 ########################################
 while [ "$ADV_MODE" -eq 1 ]; do
@@ -152,7 +150,7 @@ while [ "$ADV_MODE" -eq 1 ]; do
       "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
     ret=$?
     if [ $ret -ne 0 ] || [ -z "$adv_result" ]; then
-        # If cancelled, re-display the main checklist
+        # If cancelled, re-display main menu
         main_result=$(dialog --clear --backtitle "EASY Checklist" \
           --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
           --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
@@ -194,7 +192,7 @@ for key in "${!OPTION_TO_NAME[@]}"; do
 done
 
 ########################################
-# Global associative array to hold subscript results
+# Global associative array to hold subscript results (on = success, off = failure)
 ########################################
 declare -A REPORT
 
@@ -207,9 +205,11 @@ clear_screen() {
 
 ########################################
 # Function to run a subscript:
-# Clears the terminal before running.
-# If SHOW_OUTPUT is enabled, outputs are shown; otherwise, hidden.
-# Exit status is captured and stored in REPORT.
+# - Clears terminal before running.
+# - If SHOW_OUTPUT is enabled, output is displayed normally.
+# - If disabled, the subscript is run in trace mode with a progress gauge that updates
+#   based on the number of executed lines (non-comment, non-blank) versus total lines.
+# - The exit code is captured and stored in REPORT.
 ########################################
 run_script_live() {
     local script_file="$1"
@@ -223,8 +223,27 @@ run_script_live() {
         stdbuf -oL ./"$script_file"
         status=$?
     else
-        stdbuf -oL ./"$script_file" &>/dev/null
+        # Calculate total executable lines (non-blank, non-comment)
+        total=$(grep -v '^\s*$' "$script_file" | grep -v '^\s*#' | wc -l)
+        # Run the script in trace mode, output redirected to a temporary file
+        temp_file=$(mktemp)
+        bash -x "$script_file" &> "$temp_file" &
+        script_pid=$!
+        # Update progress gauge until the script finishes
+        while kill -0 "$script_pid" 2>/dev/null; do
+            # Count executed trace lines (starting with '+')
+            current=$(grep -c '^+' "$temp_file")
+            if [ "$total" -gt 0 ]; then
+                percent=$(( current * 100 / total ))
+            else
+                percent=100
+            fi
+            dialog --gauge "Running $display_name: $current of $total commands executed" 6 60 "$percent"
+            sleep 0.5
+        done
+        wait "$script_pid"
         status=$?
+        rm -f "$temp_file"
         echo "(Output hidden)"
     fi
     echo "----------------------------------------"
@@ -250,7 +269,7 @@ for opt in "${sorted_options[@]}"; do
 done
 
 ########################################
-# Build report items for final TUI report
+# Build report items for final TUI report (default to on if no status recorded)
 ########################################
 report_items=()
 for opt in "${FINAL_SORTED_OPTIONS[@]}"; do
