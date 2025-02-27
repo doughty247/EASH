@@ -220,3 +220,4 @@ dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_it
 clear_screen
 dialog --msgbox "All selected setup scripts have been executed." 6 50
 clear_screen
+clear
