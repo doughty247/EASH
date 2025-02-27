@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Final Report and Advanced Options header)
+# Version: 1.1.11 Stable Release (with Separate Advanced Options)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -7,9 +7,9 @@
 # dynamically builds a checklist based on all files in the EASY directory
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
-# The main checklist now includes a subcategory titled "Advanced Options:"
-# followed by a toggle for "Show Output" (default off).
 # All subscript items are enabled by default.
+# After the main checklist, a separate TUI box titled "Advanced Options"
+# is displayed with a toggle for "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -115,46 +115,36 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append a header item for Advanced Options (non-selectable) and then the advanced toggle.
-# We'll mark the header item with a tag that starts with "HDR_" so we can ignore it.
-header_tag="HDR_ADV_OPTIONS"
-header_label="Advanced Options:"
-# Since dialog doesn't support truly non-selectable items, we mark it as off and ignore it later.
-checklist_items+=("$header_tag" "$header_label" "off")
-# Append the "Show Output" toggle with tag ADV_SHOW_OUTPUT.
-advanced_tag="ADV_SHOW_OUTPUT"
-advanced_label="Show Output"
-checklist_items+=("$advanced_tag" "$advanced_label" "off")
-
 ########################################
-# Display dynamic checklist using dialog (Advanced option included)
+# Display main checklist using dialog (only subscript items)
 ########################################
-result=$(dialog --clear --backtitle "EASY Checklist" \
+main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
   --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  18 80 8 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+  16 80 6 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
-if [ -z "$result" ]; then
+if [ -z "$main_result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
-# Process result:
-# Ignore header items. If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
-SHOW_OUTPUT=0
-selected_numeric=()
-IFS=' ' read -r -a selected_options <<< "$result"
-for opt in "${selected_options[@]}"; do
-    if [[ "$opt" == "$header_tag" ]]; then
-        continue
-    elif [ "$opt" == "$advanced_tag" ]; then
-        SHOW_OUTPUT=1
-    else
-        selected_numeric+=("$opt")
-    fi
-done
-IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
+IFS=' ' read -r -a selected_options <<< "$main_result"
+IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
+
+########################################
+# Display Advanced Options in a separate box
+########################################
+adv_result=$(dialog --clear --backtitle "Advanced Options" \
+  --title "Advanced Options" \
+  --checklist "Select advanced options:" 8 60 1 \
+  "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
+
+if [[ "$adv_result" == *"ADV_SHOW_OUTPUT"* ]]; then
+    SHOW_OUTPUT=1
+else
+    SHOW_OUTPUT=0
+fi
 
 ########################################
 # Global associative array to hold subscript results (on = success, off = failure)
