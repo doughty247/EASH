@@ -8,7 +8,7 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # The main checklist includes an advanced toggle for "Show Output" (default off)
-# and all subscript items are enabled (checked) by default.
+# and all subscript items are enabled by default.
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -132,8 +132,7 @@ if [ -z "$result" ]; then
     exit 0
 fi
 
-# Process result:
-# - If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
+# Process result: if ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
 SHOW_OUTPUT=0
 selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$result"
@@ -164,11 +163,12 @@ clear_screen() {
 # Clears the terminal before running.
 # If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, they're hidden.
 # The exit code is captured and stored in REPORT.
+# Uses to_title to determine display name for consistency.
 ########################################
 run_script_live() {
     local script_file="$1"
     local display_name
-    display_name=$(basename "$script_file" _setup.sh)
+    display_name=$(to_title "$script_file")
     clear_screen
     echo "Running $display_name..."
     echo "----------------------------------------"
