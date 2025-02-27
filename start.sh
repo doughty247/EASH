@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Advanced Mode Option)
+# Version: 1.1.11 Stable Release (with Integrated Advanced Options)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,8 +8,8 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# After the main checklist, a separate Advanced Options prompt appears.
-# If Advanced Mode is enabled, you can toggle "Show Output" (default off).
+# The main checklist now includes, at the bottom, a toggle labeled "Show Output"
+# (default off) as an advanced option.
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -105,7 +105,7 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items with sequential option numbers (default state "on").
+# Build checklist items with sequential option numbers (default state "on")
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -115,38 +115,38 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
+# Append the advanced option toggle for "Show Output" (using key "SHOW_OUTPUT", label "Show Output", default off)
+advanced_key="SHOW_OUTPUT"
+advanced_label="Show Output"
+checklist_items+=("$advanced_key" "$advanced_label" "off")
+
 ########################################
-# Display main checklist using dialog (subscript items only)
+# Display main checklist using dialog (with integrated advanced option)
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  16 80 8 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+  --checklist "Select the setup scripts you want to run (they will execute from top to bottom). Advanced options are included below." \
+  20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$main_result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
+# Process result:
+# Numeric keys correspond to subscript selections; key "SHOW_OUTPUT" corresponds to the advanced option.
+SHOW_OUTPUT=0
+selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$main_result"
-IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
-unset IFS
-
-########################################
-# Prompt for Advanced Mode
-########################################
-dialog --clear --backtitle "Advanced Options" --title "Advanced Options" --yesno "Do you want to enable Advanced Mode?" 8 60
-adv_mode=$?
-if [ "$adv_mode" -eq 0 ]; then
-    adv_result=$(dialog --clear --backtitle "Advanced Options" --title "Advanced Options" --checklist "Advanced Options:" 8 60 1 "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
-    if [[ "$adv_result" == *"ADV_SHOW_OUTPUT"* ]]; then
+for opt in "${selected_options[@]}"; do
+    if [ "$opt" == "$advanced_key" ]; then
         SHOW_OUTPUT=1
     else
-        SHOW_OUTPUT=0
+        selected_numeric+=("$opt")
     fi
-else
-    SHOW_OUTPUT=0
-fi
+done
+IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
+unset IFS
 
 ########################################
 # Global associative array to hold subscript results (on = success, off = failure)
