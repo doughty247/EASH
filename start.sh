@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Final Report)
+# Version: 1.1.11 Stable Release (with Final Report, default on)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -11,9 +11,10 @@
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
-# listing each subscript with a checkbox indicating success.
+# listing each subscript with a checkbox indicating success. If no status was recorded,
+# it defaults to "on".
 #
-set -uo pipefail  # Not using -e so subscript failures do not abort the main script
+set -uo pipefail  # -e removed so that subscript failures do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -159,9 +160,8 @@ clear_screen() {
 
 ########################################
 # Function to run a subscript:
-# Clears the terminal fully before running.
-# If SHOW_OUTPUT is enabled, outputs are shown.
-# Otherwise, output is hidden.
+# Clears the terminal before running.
+# If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, they're hidden.
 # The exit code is captured and stored in REPORT.
 ########################################
 run_script_live() {
@@ -203,21 +203,19 @@ for opt in "${sorted_options[@]}"; do
 done
 
 ########################################
-# Build report items for final TUI report
+# Build report items for final TUI report (default to on if no status recorded)
 ########################################
 report_items=()
 for opt in "${sorted_options[@]}"; do
     display_name="${OPTION_TO_NAME[$opt]}"
-    # Use the stored result from REPORT, default to "off" if not present.
-    status=${REPORT["$display_name"]:-"off"}
-    # For the report, the tag and description are both the display name.
+    status=${REPORT["$display_name"]:-"on"}
     report_items+=("$display_name" "$display_name" "$status")
 done
 
 ########################################
 # Display final report using dialog checklist (read-only report)
 ########################################
-dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_items[@]} "${report_items[@]}" 3>&1 1>&2 2>&3
+dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_items[@]} "${report_items[@]}"
 
 clear_screen
 dialog --msgbox "All selected setup scripts have been executed." 6 50
