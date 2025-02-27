@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.10 Stable Release
+# Version: 1.1.11 Stable Release
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -7,10 +7,12 @@
 # dynamically builds a checklist based on all files in the EASY directory
 # that end with "_setup.sh". In the checklist, the displayed names have the
 # suffix removed, underscores replaced with spaces, and each word capitalized.
-# The selected sub-scripts are then run sequentially with output printed
-# directly to the terminal, with the terminal fully cleared before each.
-# After all selected scripts have been executed, a TUI message box is shown.
-
+# After the checklist, an "Advanced Options" dialog appears with a toggle for
+# "Show Output" (default off). Selected sub-scripts are then run sequentially;
+# if "Show Output" is enabled, each script's output is printed; otherwise,
+# output is suppressed. Before each subscript runs, the terminal (and its scrollback)
+# is fully cleared. After all selected scripts have been executed, a TUI message box is shown.
+#
 set -euo pipefail
 
 # Request sudo permission upfront
@@ -71,18 +73,16 @@ cd "$TARGET_DIR"
 # - Capitalize each word
 ########################################
 to_title() {
-    # Remove suffix and replace underscores with spaces
     local base="${1%_setup.sh}"
     local spaced
     spaced=$(echo "$base" | tr '_' ' ')
-    # Capitalize each word using sed (GNU sed required)
     echo "$spaced" | sed -r 's/(^| )(.)/\1\u\2/g'
 }
 
 ########################################
 # Dynamically build checklist from files ending with _setup.sh
 ########################################
-declare -A SCRIPT_MAPPING  # Maps option number to script filename
+declare -A SCRIPT_MAPPING  # Maps display name to actual script filename
 display_names=()
 
 for script in *_setup.sh; do
@@ -130,6 +130,20 @@ IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
 unset IFS
 
 ########################################
+# Advanced Options - Separate Toggle for "Show Output"
+########################################
+advanced_result=$(dialog --clear --backtitle "Advanced Options" \
+  --title "Advanced Options" \
+  --checklist "Select advanced options:" 8 60 1 \
+  "SHOW_OUTPUT" "Display subscript output" off 3>&1 1>&2 2>&3)
+
+if [[ "$advanced_result" == *"SHOW_OUTPUT"* ]]; then
+    SHOW_OUTPUT=1
+else
+    SHOW_OUTPUT=0
+fi
+
+########################################
 # Function to fully clear the terminal (including scrollback)
 ########################################
 clear_screen() {
@@ -137,16 +151,22 @@ clear_screen() {
 }
 
 ########################################
-# Function to run a script with its output printed directly.
-# Clears the terminal fully before running the subscript,
-# then waits for user input and clears again.
+# Function to run a script:
+# If SHOW_OUTPUT is enabled, print output directly.
+# If disabled, run script silently.
+# In either case, clear the terminal fully before and after, and wait for Enter.
 ########################################
 run_script_live() {
     local script_file="$1"
     clear_screen
     echo "Running $(basename "$script_file" _setup.sh)..."
     echo "----------------------------------------"
-    stdbuf -oL ./"$script_file"
+    if [ "$SHOW_OUTPUT" -eq 1 ]; then
+        stdbuf -oL ./"$script_file"
+    else
+        stdbuf -oL ./"$script_file" &>/dev/null
+        echo "(Output hidden)"
+    fi
     echo "----------------------------------------"
     echo "$(basename "$script_file" _setup.sh) completed."
     echo "Press Enter to continue..."
