@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Final Report, default selection on, advanced option with divider)
+# Version: 1.1.11 Stable Release (with Separate Advanced Options)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,9 +8,8 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# The main checklist now includes an advanced toggle with a multi-line label,
-# where the first line is a divider ("---------- Advanced Options ----------")
-# and the second line is "Show Output" (default off).
+# After the main checklist, a separate prompt asks whether to enable Advanced Mode.
+# If enabled, a second dialog appears with advanced options ("Show Output", default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -116,39 +115,44 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append the advanced option toggle for "Show Output" with a divider in the label.
-# The label is multi-line, with the first line as a divider and the second line as "Show Output".
-advanced_tag="ADV_SHOW_OUTPUT"
-advanced_label="---------- Advanced Options ----------\nShow Output"
-checklist_items+=("$advanced_tag" "$advanced_label" "off")
-
 ########################################
-# Display main checklist using dialog (advanced option attached)
+# Display main checklist using dialog (subscript items only)
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
   --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+  16 80 8 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$main_result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
-# Process result:
-# If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
-SHOW_OUTPUT=0
-selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$main_result"
-for opt in "${selected_options[@]}"; do
-    if [ "$opt" == "$advanced_tag" ]; then
+IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
+unset IFS
+
+########################################
+# Prompt for Advanced Mode
+########################################
+adv_mode=$(dialog --clear --backtitle "Advanced Options" \
+  --title "Advanced Options" \
+  --yesno "Do you want to enable Advanced Mode?" 8 60 3>&1 1>&2 2>&3; echo $?)
+
+if [ "$adv_mode" -eq 0 ]; then
+    # If yes, display a checklist for advanced options (currently only "Show Output")
+    adv_result=$(dialog --clear --backtitle "Advanced Options" \
+      --title "Advanced Options" \
+      --checklist "Advanced Options:" 8 60 1 \
+      "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
+    if [[ "$adv_result" == *"ADV_SHOW_OUTPUT"* ]]; then
         SHOW_OUTPUT=1
     else
-        selected_numeric+=("$opt")
+        SHOW_OUTPUT=0
     fi
-done
-IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
-unset IFS
+else
+    SHOW_OUTPUT=0
+fi
 
 ########################################
 # Global associative array to hold subscript results (on = success, off = failure)
