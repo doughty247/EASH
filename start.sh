@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Version: 1.1.16 Stable Release (with Advanced Options Re-run and SHOW_OUTPUT initialization)
+# Version: 1.1.17 Stable Release (with Advanced Options Re-run and SHOW_OUTPUT initialized)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
-# dynamically builds a checklist based on all files in the EASY directory
-# that end with "_setup.sh". The displayed names have the suffix removed,
-# underscores replaced with spaces, and each word capitalized.
+# and dynamically builds a checklist from all files in the EASY directory ending with "_setup.sh".
+# Displayed names have the suffix removed, underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
 # The main checklist includes an extra toggle "Enable Advanced Options" (default off).
-# If that toggle is selected, a separate advanced options dialog is shown
-# (allowing you to toggle "Show Output", default off).
-# The selected sub-scripts are then run sequentially.
-# When "Show Output" is disabled, the subscript runs in trace mode with a progress gauge.
-# Before each subscript runs, the terminal (and its scrollback) is fully cleared.
-# After all selected scripts have been executed, a final TUI report is shown,
-# listing each subscript with a checkbox indicating success.
+# If that toggle is selected, a separate advanced options dialog appears to toggle "Show Output" (default off).
+# If the advanced options dialog is cancelled, the main menu is re-displayed.
+# The selected subscripts are then run sequentially.
+# If "Show Output" is disabled, a progress gauge is shown updating as the subscript executes.
+# After running all subscripts, a final report is displayed listing each subscript with a checkbox indicating success.
 #
 set -uo pipefail  # -e removed so that subscript failures do not abort the main script
+
+# Initialize SHOW_OUTPUT to ensure it's always defined
+SHOW_OUTPUT=0
 
 # Request sudo permission upfront
 sudo -v
@@ -70,8 +70,8 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Function: Convert filename to display name
-# (Removes "_setup.sh", replaces underscores with spaces, capitalizes each word)
+# Function: Convert filename to display name:
+# Remove "_setup.sh", replace underscores with spaces, capitalize each word.
 ########################################
 to_title() {
     local base="${1%_setup.sh}"
@@ -116,75 +116,51 @@ advanced_label="Enable Advanced Options"
 checklist_items+=("$advanced_toggle" "$advanced_label" "off")
 
 ########################################
-# Display main checklist dialog
+# Main Menu Loop: Display main checklist and process selection
 ########################################
-main_result=$(dialog --clear --backtitle "EASY Checklist" \
-  --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
-if [ -z "$main_result" ]; then
-    dialog --msgbox "No options selected. Exiting." 6 50
-    exit 0
-fi
-ADV_MODE=0
-selected_numeric=()
-IFS=' ' read -r -a main_opts <<< "$main_result"
-for opt in "${main_opts[@]}"; do
-    if [ "$opt" == "$advanced_toggle" ]; then
-        ADV_MODE=1
-    else
-        selected_numeric+=("$opt")
+while true; do
+    main_result=$(dialog --clear --backtitle "EASY Checklist" \
+      --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
+      --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
+      20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+    
+    if [ -z "$main_result" ]; then
+        dialog --msgbox "No options selected. Exiting." 6 50
+        exit 0
     fi
-done
-IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
-unset IFS
-
-# Initialize SHOW_OUTPUT to 0 to avoid unbound variable error.
-SHOW_OUTPUT=0
-
-########################################
-# If Advanced Mode is enabled, show advanced options dialog;
-# if cancelled, re-display main menu.
-########################################
-while [ "$ADV_MODE" -eq 1 ]; do
-    adv_result=$(dialog --clear --backtitle "Advanced Options" \
-      --title "Advanced Options" \
-      --checklist "Select Advanced Options:" 8 60 1 \
-      "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
-    ret=$?
-    if [ $ret -ne 0 ] || [ -z "$adv_result" ]; then
-        # Re-run main menu if advanced options dialog is cancelled
-        main_result=$(dialog --clear --backtitle "EASY Checklist" \
-          --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-          --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-          20 80 10 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
-        if [ -z "$main_result" ]; then
-            dialog --msgbox "No options selected. Exiting." 6 50
-            exit 0
-        fi
-        ADV_MODE=0
-        selected_numeric=()
-        IFS=' ' read -r -a main_opts <<< "$main_result"
-        for opt in "${main_opts[@]}"; do
-            if [ "$opt" == "$advanced_toggle" ]; then
-                ADV_MODE=1
-            else
-                selected_numeric+=("$opt")
-            fi
-        done
-        IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
-        unset IFS
-        if [ "$ADV_MODE" -ne 1 ]; then
-            break
-        fi
-    else
-        if [[ "$adv_result" == *"SHOW_OUTPUT"* ]]; then
-            SHOW_OUTPUT=1
+    
+    ADV_MODE=0
+    selected_numeric=()
+    IFS=' ' read -r -a main_opts <<< "$main_result"
+    for opt in "${main_opts[@]}"; do
+        if [ "$opt" == "$advanced_toggle" ]; then
+            ADV_MODE=1
         else
-            SHOW_OUTPUT=0
+            selected_numeric+=("$opt")
         fi
-        break
+    done
+    IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
+    unset IFS
+
+    # If Advanced Mode is enabled, display the advanced options dialog.
+    if [ "$ADV_MODE" -eq 1 ]; then
+        adv_result=$(dialog --clear --backtitle "Advanced Options" \
+          --title "Advanced Options" \
+          --checklist "Select Advanced Options:" 8 60 1 \
+          "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
+        ret=$?
+        if [ $ret -ne 0 ] || [ -z "$adv_result" ]; then
+            # Re-run main menu if advanced options dialog is cancelled.
+            continue
+        else
+            if [[ "$adv_result" == *"SHOW_OUTPUT"* ]]; then
+                SHOW_OUTPUT=1
+            else
+                SHOW_OUTPUT=0
+            fi
+        fi
     fi
+    break
 done
 
 # Save constant copies for final reporting.
@@ -195,23 +171,22 @@ for key in "${!OPTION_TO_NAME[@]}"; do
 done
 
 ########################################
-# Global associative array to hold subscript results
+# Global associative array for subscript results.
 ########################################
 declare -A REPORT
 
 ########################################
-# Function to fully clear the terminal (including scrollback)
+# Function: Fully clear terminal (including scrollback)
 ########################################
 clear_screen() {
     clear && printf '\033[3J'
 }
 
 ########################################
-# Function to run a subscript:
-# Clears the terminal before running.
-# If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, the script is run
-# in trace mode with a progress gauge updating based on executed lines.
-# The exit code is captured and stored in REPORT.
+# Function: Run a subscript.
+# Clears terminal before running.
+# If SHOW_OUTPUT is enabled, output is shown; otherwise, script runs in trace mode with progress gauge.
+# Exit status is stored in REPORT.
 ########################################
 run_script_live() {
     local script_file="$1"
@@ -225,6 +200,7 @@ run_script_live() {
         stdbuf -oL ./"$script_file"
         status=$?
     else
+        # Calculate total executable lines (excluding blanks and comments)
         total=$(grep -v '^\s*$' "$script_file" | grep -v '^\s*#' | wc -l)
         temp_file=$(mktemp)
         bash -x "$script_file" &> "$temp_file" &
@@ -258,7 +234,7 @@ run_script_live() {
 }
 
 ########################################
-# Run each selected subscript sequentially
+# Run each selected subscript sequentially.
 ########################################
 for opt in "${sorted_options[@]}"; do
     display_name="${OPTION_TO_NAME[$opt]}"
@@ -267,7 +243,7 @@ for opt in "${sorted_options[@]}"; do
 done
 
 ########################################
-# Build report items for final TUI report
+# Build final report items (default "on" if not set).
 ########################################
 report_items=()
 for opt in "${FINAL_SORTED_OPTIONS[@]}"; do
@@ -277,7 +253,7 @@ for opt in "${FINAL_SORTED_OPTIONS[@]}"; do
 done
 
 ########################################
-# Display final report using dialog checklist (read-only report)
+# Display final installation report.
 ########################################
 dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_items[@]} "${report_items[@]}"
 
