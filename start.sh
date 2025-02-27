@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.16 Stable Release
+# Version: 1.1.16 Stable Release (with Advanced Options Re-run and SHOW_OUTPUT initialization)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,16 +8,16 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# The main checklist includes an extra toggle "Enable Advanced Options".
-# If enabled, a separate dialog appears to toggle "Show Output" (default off).
-# When running a selected subscript:
-#   - If Show Output is enabled, output is printed normally.
-#   - If disabled, the subscript is run in trace mode and a progress gauge is displayed,
-#     updating as the number of executed lines (non-comment, non-blank) increases.
-# After all selected scripts have been executed, a final TUI report is shown
+# The main checklist includes an extra toggle "Enable Advanced Options" (default off).
+# If that toggle is selected, a separate advanced options dialog is shown
+# (allowing you to toggle "Show Output", default off).
+# The selected sub-scripts are then run sequentially.
+# When "Show Output" is disabled, the subscript runs in trace mode with a progress gauge.
+# Before each subscript runs, the terminal (and its scrollback) is fully cleared.
+# After all selected scripts have been executed, a final TUI report is shown,
 # listing each subscript with a checkbox indicating success.
 #
-set -uo pipefail  # -e removed so that failures in subscripts do not abort the main script
+set -uo pipefail  # -e removed so that subscript failures do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -45,7 +45,7 @@ if ! command -v git &>/dev/null; then
 fi
 
 ########################################
-# Install Dialog if not already installed (for TUI)
+# Install Dialog if not already installed
 ########################################
 if ! command -v dialog &>/dev/null; then
     echo "Dialog is not installed. Installing Dialog on Fedora..."
@@ -71,7 +71,7 @@ cd "$TARGET_DIR"
 
 ########################################
 # Function: Convert filename to display name
-# Removes "_setup.sh", replaces underscores with spaces, and capitalizes each word.
+# (Removes "_setup.sh", replaces underscores with spaces, capitalizes each word)
 ########################################
 to_title() {
     local base="${1%_setup.sh}"
@@ -81,7 +81,7 @@ to_title() {
 }
 
 ########################################
-# Dynamically build checklist from files ending with _setup.sh
+# Build checklist from files ending with _setup.sh
 ########################################
 declare -A SCRIPT_MAPPING  # Maps display name to script filename
 display_names=()
@@ -100,7 +100,7 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items for subscript selections (default state "on")
+# Build main checklist items for subscript selections (default "on")
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -110,13 +110,13 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append advanced toggle for enabling advanced mode (key ADV_ENABLE, label "Enable Advanced Options", default off)
+# Append extra toggle for enabling advanced options (key: ADV_ENABLE, label: "Enable Advanced Options", default off)
 advanced_toggle="ADV_ENABLE"
 advanced_label="Enable Advanced Options"
 checklist_items+=("$advanced_toggle" "$advanced_label" "off")
 
 ########################################
-# Display main checklist using dialog (subscript items + advanced toggle)
+# Display main checklist dialog
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
@@ -139,8 +139,11 @@ done
 IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
 
+# Initialize SHOW_OUTPUT to 0 to avoid unbound variable error.
+SHOW_OUTPUT=0
+
 ########################################
-# If Advanced Mode is enabled, display advanced options dialog;
+# If Advanced Mode is enabled, show advanced options dialog;
 # if cancelled, re-display main menu.
 ########################################
 while [ "$ADV_MODE" -eq 1 ]; do
@@ -150,7 +153,7 @@ while [ "$ADV_MODE" -eq 1 ]; do
       "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
     ret=$?
     if [ $ret -ne 0 ] || [ -z "$adv_result" ]; then
-        # If cancelled, re-display main menu
+        # Re-run main menu if advanced options dialog is cancelled
         main_result=$(dialog --clear --backtitle "EASY Checklist" \
           --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
           --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
@@ -192,7 +195,7 @@ for key in "${!OPTION_TO_NAME[@]}"; do
 done
 
 ########################################
-# Global associative array to hold subscript results (on = success, off = failure)
+# Global associative array to hold subscript results
 ########################################
 declare -A REPORT
 
@@ -205,11 +208,10 @@ clear_screen() {
 
 ########################################
 # Function to run a subscript:
-# - Clears terminal before running.
-# - If SHOW_OUTPUT is enabled, output is displayed normally.
-# - If disabled, the subscript is run in trace mode with a progress gauge that updates
-#   based on the number of executed lines (non-comment, non-blank) versus total lines.
-# - The exit code is captured and stored in REPORT.
+# Clears the terminal before running.
+# If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, the script is run
+# in trace mode with a progress gauge updating based on executed lines.
+# The exit code is captured and stored in REPORT.
 ########################################
 run_script_live() {
     local script_file="$1"
@@ -223,15 +225,11 @@ run_script_live() {
         stdbuf -oL ./"$script_file"
         status=$?
     else
-        # Calculate total executable lines (non-blank, non-comment)
         total=$(grep -v '^\s*$' "$script_file" | grep -v '^\s*#' | wc -l)
-        # Run the script in trace mode, output redirected to a temporary file
         temp_file=$(mktemp)
         bash -x "$script_file" &> "$temp_file" &
         script_pid=$!
-        # Update progress gauge until the script finishes
         while kill -0 "$script_pid" 2>/dev/null; do
-            # Count executed trace lines (starting with '+')
             current=$(grep -c '^+' "$temp_file")
             if [ "$total" -gt 0 ]; then
                 percent=$(( current * 100 / total ))
@@ -269,7 +267,7 @@ for opt in "${sorted_options[@]}"; do
 done
 
 ########################################
-# Build report items for final TUI report (default to on if no status recorded)
+# Build report items for final TUI report
 ########################################
 report_items=()
 for opt in "${FINAL_SORTED_OPTIONS[@]}"; do
