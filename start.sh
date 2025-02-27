@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release
+# Version: 1.1.11 Stable Release (with Final Report)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -10,9 +10,10 @@
 # The main checklist includes an advanced toggle for "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
-# After all selected scripts have been executed, a TUI message box is shown.
+# After all selected scripts have been executed, a final TUI report is shown,
+# listing each subscript with a checkbox indicating success.
 #
-set -uo pipefail  # Removed -e so that failures in sub-scripts do not cause overall exit
+set -uo pipefail  # Not using -e so subscript failures do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -145,6 +146,11 @@ IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
 
 ########################################
+# Global associative array to hold subscript results (on = success, off = failure)
+########################################
+declare -A REPORT
+
+########################################
 # Function to fully clear the terminal (including scrollback)
 ########################################
 clear_screen() {
@@ -152,31 +158,36 @@ clear_screen() {
 }
 
 ########################################
-# Function to run a subscript
-# Clears the terminal before running the script.
-# If SHOW_OUTPUT is enabled, outputs are printed.
-# Otherwise, the output is hidden, and errors are noted.
+# Function to run a subscript:
+# Clears the terminal fully before running.
+# If SHOW_OUTPUT is enabled, outputs are shown.
+# Otherwise, output is hidden.
+# The exit code is captured and stored in REPORT.
 ########################################
 run_script_live() {
     local script_file="$1"
-    local script_name
-    script_name=$(basename "$script_file" _setup.sh)
+    local display_name
+    display_name=$(basename "$script_file" _setup.sh)
     clear_screen
-    echo "Running $script_name..."
+    echo "Running $display_name..."
     echo "----------------------------------------"
+    local status=0
     if [ "$SHOW_OUTPUT" -eq 1 ]; then
-        if ! stdbuf -oL ./"$script_file"; then
-            echo "Error encountered while running $script_name."
-        fi
+        stdbuf -oL ./"$script_file"
+        status=$?
     else
-        if ! stdbuf -oL ./"$script_file" &>/dev/null; then
-            echo "Error encountered while running $script_name (output hidden)."
-        else
-            echo "(Output hidden)"
-        fi
+        stdbuf -oL ./"$script_file" &>/dev/null
+        status=$?
+        echo "(Output hidden)"
     fi
     echo "----------------------------------------"
-    echo "$script_name completed."
+    echo "$display_name completed."
+    if [ "$status" -eq 0 ]; then
+         REPORT["$display_name"]="on"
+    else
+         REPORT["$display_name"]="off"
+         echo "Error: $display_name exited with status $status"
+    fi
     echo "Press Enter to continue..."
     read -r
     clear_screen
@@ -190,6 +201,23 @@ for opt in "${sorted_options[@]}"; do
     script_file="${SCRIPT_MAPPING[$display_name]}"
     run_script_live "$script_file"
 done
+
+########################################
+# Build report items for final TUI report
+########################################
+report_items=()
+for opt in "${sorted_options[@]}"; do
+    display_name="${OPTION_TO_NAME[$opt]}"
+    # Use the stored result from REPORT, default to "off" if not present.
+    status=${REPORT["$display_name"]:-"off"}
+    # For the report, the tag and description are both the display name.
+    report_items+=("$display_name" "$display_name" "$status")
+done
+
+########################################
+# Display final report using dialog checklist (read-only report)
+########################################
+dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_items[@]} "${report_items[@]}" 3>&1 1>&2 2>&3
 
 clear_screen
 dialog --msgbox "All selected setup scripts have been executed." 6 50
