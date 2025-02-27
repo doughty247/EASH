@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Version: 1.1.13 Stable Release
+# Version: 1.1.14
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
 # clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
 # dynamically builds a checklist based on all files in the EASY directory
-# that end with "_setup.sh". In the checklist, the displayed names have the
-# suffix removed, underscores replaced with spaces, and each word capitalized.
+# that end with "_setup.sh". The displayed names have the suffix removed,
+# underscores replaced with spaces, and each word capitalized.
 # The main checklist includes an advanced toggle for "Show Output" (default off).
-# The selected sub-scripts are then run sequentially. Before each sub-script,
-# the terminal (and its scrollback) is fully cleared.
-# If "Show Output" is off, subscript output is hidden and a progress spinner is
-# shown whenever a line indicating a download command ("dnf" or "docker") is detected.
-# After each script, an overall progress indicator ("Progress: X/Y scripts executed")
-# is printed at the bottom, and finally a TUI message box confirms completion.
+# The selected sub-scripts are then run sequentially.
+# Before each subscript runs, the terminal (and its scrollback) is fully cleared.
+# After all selected scripts have been executed, a final TUI message box is shown.
 #
 set -euo pipefail
 
@@ -69,8 +66,8 @@ fi
 cd "$TARGET_DIR"
 
 ########################################
-# Function to convert filename to display name:
-# - Remove suffix "_setup.sh"
+# Function to convert a filename into a display name:
+# - Remove the suffix "_setup.sh"
 # - Replace underscores with spaces
 # - Capitalize each word
 ########################################
@@ -121,7 +118,7 @@ advanced_label="Show Output"
 checklist_items+=("$advanced_tag" "$advanced_label" "off")
 
 ########################################
-# Display main checklist using dialog (Advanced option included)
+# Display dynamic checklist using dialog (Advanced option included)
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
@@ -155,63 +152,24 @@ clear_screen() {
 }
 
 ########################################
-# Spinner function for download activity (square-shaped)
-# Runs for a fixed duration (5 seconds)
-########################################
-spinner_download() {
-    local duration=5
-    local start_time=$(date +%s)
-    local spinner_frames=("■□□□□" "□■□□□" "□□■□□" "□□□■□" "□□□□■")
-    local frame_count=${#spinner_frames[@]}
-    while [ $(( $(date +%s) - start_time )) -lt $duration ]; do
-        for ((i=0; i<frame_count; i++)); do
-            dialog --infobox "Downloading... ${spinner_frames[$i]}" 3 30
-            sleep 0.2
-        done
-    done
-}
-
-# Global flag to avoid multiple simultaneous spinners.
-DOWNLOAD_SPINNER_RUNNING=0
-
-########################################
-# Function to run a script with overall progress indication.
-# If SHOW_OUTPUT is enabled, output is shown normally.
-# If disabled, output is hidden; additionally, if a line indicating a download
-# (contains "dnf" or "docker") is detected, a secondary spinner is shown.
-# After each script, overall progress ("Progress: X/Y scripts executed") is displayed.
+# Function to run a script with its output printed directly.
+# Clears the terminal fully before running the subscript,
+# then waits for user input and clears again.
+# When SHOW_OUTPUT is disabled, output is hidden.
 ########################################
 run_script_live() {
     local script_file="$1"
     clear_screen
     echo "Running $(basename "$script_file" _setup.sh)..."
     echo "----------------------------------------"
-    
     if [ "$SHOW_OUTPUT" -eq 1 ]; then
         stdbuf -oL ./"$script_file"
     else
-        # Run script with trace and process output line-by-line.
-        while IFS= read -r line; do
-            # If line indicates a download, and spinner not running, start spinner.
-            if [[ "$line" == *"dnf"* ]] || [[ "$line" == *"docker"* ]]; then
-                if [ "$DOWNLOAD_SPINNER_RUNNING" -eq 0 ]; then
-                    DOWNLOAD_SPINNER_RUNNING=1
-                    spinner_download &
-                    spinner_pid=$!
-                    # Wait a short moment to simulate download progress.
-                    sleep 1
-                    kill $spinner_pid 2>/dev/null || true
-                    DOWNLOAD_SPINNER_RUNNING=0
-                fi
-            fi
-            # (Do not output the trace line when SHOW_OUTPUT is off)
-        done < <(stdbuf -oL bash -x "$script_file")
+        stdbuf -oL bash -x "$script_file" &>/dev/null
         echo "(Output hidden)"
     fi
-    
     echo "----------------------------------------"
-    script_name=$(basename "$script_file" _setup.sh)
-    echo "$script_name completed."
+    echo "$(basename "$script_file" _setup.sh) completed."
 }
 
 ########################################
