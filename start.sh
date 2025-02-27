@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
-# Version: 1.1.13 Stable Release (with Advanced Options Re-run)
+# Version: 1.1.14 Stable Release (with Advanced Options Re-run)
 # Last Updated: 2025-02-26
-
-set -uo pipefail  # -e removed so that subscript failures do not abort the main script
+# Description: EASY - Effortless Automated Self-hosting for You
+# This script checks that you're on Fedora, installs required tools,
+# clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
+# dynamically builds a checklist based on all files in the EASY directory
+# that end with "_setup.sh". The displayed names have the suffix removed,
+# underscores replaced with spaces, and each word capitalized.
+# All subscript items are enabled by default.
+# The main checklist includes an extra toggle "Enable Advanced Options" (default off).
+# If that toggle is selected, a separate advanced options dialog is shown
+# (allowing you to toggle "Show Output", default off). If you cancel the advanced
+# options dialog, the main menu is re-displayed.
+# The selected sub-scripts are then run sequentially.
+# Before each subscript runs, the terminal (and its scrollback) is fully cleared.
+# After all selected scripts have been executed, a final TUI report is shown,
+# listing each subscript with a checkbox indicating success.
+#
+set -uo pipefail  # Do not use -e so failures in subscripts do not abort the main script
 
 # Request sudo permission upfront
 sudo -v
@@ -67,7 +82,7 @@ to_title() {
 }
 
 ########################################
-# Build main checklist from files ending with _setup.sh
+# Dynamically build checklist from files ending with _setup.sh
 ########################################
 declare -A SCRIPT_MAPPING  # Maps display name to script filename
 display_names=()
@@ -89,7 +104,7 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items for subscript selections (default "on")
+# Build checklist items for subscript selections (default state "on").
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
@@ -99,13 +114,14 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append advanced options toggle for enabling advanced mode (key: ADV_ENABLE, label: "Enable Advanced Options", default off)
+# Append extra toggle for enabling advanced mode (key: ADV_ENABLE, label: "Enable Advanced Options", default off).
 advanced_toggle="ADV_ENABLE"
 advanced_label="Enable Advanced Options"
 checklist_items+=("$advanced_toggle" "$advanced_label" "off")
 
 ########################################
-# Loop: Display main checklist until advanced options dialog is not cancelled.
+# Main menu loop: display main checklist and, if advanced mode is enabled,
+# display advanced options dialog. If the advanced dialog is cancelled, re-run main menu.
 ########################################
 while true; do
     main_result=$(dialog --clear --backtitle "EASY Checklist" \
@@ -118,7 +134,7 @@ while true; do
         exit 0
     fi
 
-    # Process main_result: Numeric keys for subscript items, ADV_ENABLE for advanced mode toggle.
+    # Process main_result: Numeric keys correspond to subscript selections; ADV_ENABLE for advanced mode.
     ADV_MODE=0
     selected_numeric=()
     IFS=' ' read -r -a main_opts <<< "$main_result"
@@ -132,15 +148,15 @@ while true; do
     IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
     unset IFS
 
-    # If Advanced Mode is enabled, display advanced options dialog.
+    # If Advanced Mode is enabled, display the advanced options dialog.
     if [ "$ADV_MODE" -eq 1 ]; then
         adv_result=$(dialog --clear --backtitle "Advanced Options" \
           --title "Advanced Options" \
           --checklist "Select Advanced Options:" 8 60 1 \
           "SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
         ret=$?
-        if [ $ret -ne 0 ]; then
-            # If canceled, re-run main menu.
+        # If the advanced options dialog is cancelled or returns empty, re-run main menu.
+        if [ $ret -ne 0 ] || [ -z "$adv_result" ]; then
             continue
         else
             if [[ "$adv_result" == *"SHOW_OUTPUT"* ]]; then
@@ -177,8 +193,8 @@ clear_screen() {
 ########################################
 # Function to run a subscript:
 # Clears terminal before running.
-# If SHOW_OUTPUT is enabled, output is displayed; otherwise, hidden.
-# Exit status is stored in REPORT.
+# If SHOW_OUTPUT is enabled, outputs are displayed; otherwise, they're hidden.
+# The exit code is captured and stored in REPORT.
 ########################################
 run_script_live() {
     local script_file="$1"
