@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.14
+# Version: 1.1.12 Stable Release
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -9,8 +9,10 @@
 # underscores replaced with spaces, and each word capitalized.
 # The main checklist includes an advanced toggle for "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
-# Before each subscript runs, the terminal (and its scrollback) is fully cleared.
-# After all selected scripts have been executed, a final TUI message box is shown.
+# If "Show Output" is off, each subscript is run with bash -x,
+# and a real-time progress gauge is displayed based on the number of executed commands.
+# Before running each subscript, the terminal (and its scrollback) is fully cleared.
+# After all selected scripts have been executed, a TUI message box is shown.
 #
 set -euo pipefail
 
@@ -58,7 +60,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "$REPO_URL" "$TARGET_DIR"
 else
     echo "Repository found in ${TARGET_DIR}. Updating repository..."
-    cd "$HOME"  # move out of repository before removal
+    cd "$HOME"  # Move out of the repository before removal.
     sudo rm -rf "$TARGET_DIR"
     git clone "$REPO_URL" "$TARGET_DIR"
 fi
@@ -98,7 +100,7 @@ if [ "${#display_names[@]}" -eq 0 ]; then
     exit 1
 fi
 
-# Sort display names alphabetically.
+# Sort the display names alphabetically.
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
@@ -153,39 +155,74 @@ clear_screen() {
 
 ########################################
 # Function to run a script with its output printed directly.
-# Clears the terminal fully before running the subscript,
-# then waits for user input and clears again.
-# When SHOW_OUTPUT is disabled, output is hidden.
+# If SHOW_OUTPUT is enabled, the subscript is run normally.
+# If disabled, the subscript is run with bash -x and its output is captured
+# to a temporary file; a background loop periodically counts the number of trace lines
+# (those beginning with "+") and updates a progress gauge accordingly.
 ########################################
 run_script_live() {
     local script_file="$1"
+    local script_name
+    script_name=$(basename "$script_file" _setup.sh)
     clear_screen
-    echo "Running $(basename "$script_file" _setup.sh)..."
+    echo "Running $script_name..."
     echo "----------------------------------------"
     if [ "$SHOW_OUTPUT" -eq 1 ]; then
         stdbuf -oL ./"$script_file"
     else
-        stdbuf -oL bash -x "$script_file" &>/dev/null
+        # Calculate total executable lines (non-empty and non-comment)
+        total=$(grep -v '^\s*$' "$script_file" | grep -v '^\s*#' | wc -l)
+        # Create a temporary file to capture trace output.
+        temp_file=$(mktemp)
+        # Run the script with trace output redirected to temp_file in background.
+        bash -x "$script_file" &> "$temp_file" &
+        script_pid=$!
+        # Start background loop to update progress gauge.
+        (
+          while kill -0 "$script_pid" 2>/dev/null; do
+            current=$(grep -c '^+' "$temp_file")
+            if [ "$total" -gt 0 ]; then
+                percent=$(( current * 100 / total ))
+            else
+                percent=100
+            fi
+            dialog --gauge "Running $script_name: $current of $total commands executed" 6 60 "$percent"
+            sleep 0.5
+          done
+          # One final update after the script finishes.
+          current=$(grep -c '^+' "$temp_file")
+          if [ "$total" -gt 0 ]; then
+              percent=$(( current * 100 / total ))
+          else
+              percent=100
+          fi
+          dialog --gauge "Running $script_name: $current of $total commands executed" 6 60 "$percent"
+        )
+        wait "$script_pid"
+        rm -f "$temp_file"
         echo "(Output hidden)"
     fi
     echo "----------------------------------------"
-    echo "$(basename "$script_file" _setup.sh) completed."
+    echo "$script_name completed."
+    echo "Press Enter to continue..."
+    read -r
+    clear_screen
 }
 
 ########################################
-# Function to display overall progress
+# Function to display overall progress after each script.
 ########################################
 display_overall_progress() {
     local current=$1
     local total=$2
     local percent=$(( current * 100 / total ))
-    dialog --gauge "Progress: Script $current of $total executed" 6 60 "$percent"
+    dialog --gauge "Overall Progress: $current/$total scripts executed" 6 60 "$percent"
     sleep 1
     clear_screen
 }
 
 ########################################
-# Run each selected setup script sequentially and update overall progress
+# Run each selected setup script sequentially and update overall progress.
 ########################################
 total_scripts=${#sorted_options[@]}
 current=0
