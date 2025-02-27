@@ -10,7 +10,5 @@ Effortless Automated Self-hosting for You
 ## Installation & Usage
 
 ```
-function test() {
-  console.log("curl -L -s https://raw.githubusercontent.com/doughty247/EASY/refs/heads/main/start.sh | bash");
-}
+curl -L -s https://raw.githubusercontent.com/doughty247/EASY/refs/heads/main/start.sh | bash
 ```
