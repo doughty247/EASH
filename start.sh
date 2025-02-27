@@ -1,22 +1,7 @@
 #!/usr/bin/env bash
 # Version: 1.1.18 Stable Release
 # Last Updated: 2025-02-26
-# Description: EASY - Effortless Automated Self-hosting for You
-# This script checks that you're on Fedora, installs required tools,
-# clones/updates the EASY repo (using sudo rm -rf to remove any old copy),
-# and dynamically builds a checklist from all files in the EASY directory
-# ending with "_setup.sh". Displayed names have the suffix removed,
-# underscores replaced with spaces, and each word capitalized.
-# All subscript items are enabled by default.
-# The main checklist includes an extra toggle "Enable Advanced Options".
-# If that toggle is selected, a separate dialog lets you toggle "Show Output" (default off).
-# When running a selected subscript:
-#   - If "Show Output" is enabled, output is printed normally.
-#   - Otherwise, the subscript is run in trace mode with a progress gauge that updates
-#     based on the percentage of non-comment, non-blank lines executed.
-# The gauge displays a constant message ("Running <name>...") without showing command counts.
-# After running all subscripts, a final report is displayed indicating success for each.
-#
+
 set -uo pipefail  # -e removed so that subscript failures do not abort the main script
 
 # Initialize SHOW_OUTPUT variable
