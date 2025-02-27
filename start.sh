@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Final Report, default on)
+# Version: 1.1.11 Stable Release (with Final Report, default subscript selection on)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -7,12 +7,12 @@
 # dynamically builds a checklist based on all files in the EASY directory
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
-# The main checklist includes an advanced toggle for "Show Output" (default off).
+# The main checklist includes an advanced toggle for "Show Output" (default off)
+# and all subscript items are enabled (checked) by default.
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
-# listing each subscript with a checkbox indicating success. If no status was recorded,
-# it defaults to "on".
+# listing each subscript with a checkbox indicating success.
 #
 set -uo pipefail  # -e removed so that subscript failures do not abort the main script
 
@@ -104,17 +104,17 @@ fi
 IFS=$'\n' sorted_display_names=($(sort <<<"${display_names[*]}"))
 unset IFS
 
-# Build checklist items with sequential option numbers.
+# Build checklist items with sequential option numbers (default state "on").
 checklist_items=()
 declare -A OPTION_TO_NAME
 option_counter=1
 for name in "${sorted_display_names[@]}"; do
-    checklist_items+=("$option_counter" "$name" "off")
+    checklist_items+=("$option_counter" "$name" "on")
     OPTION_TO_NAME["$option_counter"]="$name"
     ((option_counter++))
 done
 
-# Append advanced option toggle for "Show Output"
+# Append advanced option toggle for "Show Output" (default off).
 advanced_tag="ADV_SHOW_OUTPUT"
 advanced_label="Show Output"
 checklist_items+=("$advanced_tag" "$advanced_label" "off")
@@ -132,7 +132,8 @@ if [ -z "$result" ]; then
     exit 0
 fi
 
-# Process result: if ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
+# Process result:
+# - If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
 SHOW_OUTPUT=0
 selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$result"
