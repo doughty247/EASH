@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Advanced Options Divider)
+# Version: 1.1.11 Stable Release (with Final Report, default selection on, advanced option with divider)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,8 +8,9 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# The main checklist now includes a divider labeled "---------- Advanced Options ----------"
-# followed by a toggle "Show Output" (default off) within the same dialog.
+# The main checklist now includes an advanced toggle with a multi-line label,
+# where the first line is a divider ("---------- Advanced Options ----------")
+# and the second line is "Show Output" (default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -115,18 +116,14 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
-# Append a divider and the advanced option toggle for "Show Output" to the same checklist.
-# The divider item uses a non-numeric tag that we will ignore.
-divider_tag="DIV_ADV"
-divider_label="---------- Advanced Options ----------"
-checklist_items+=("$divider_tag" "$divider_label" "off")
-
+# Append the advanced option toggle for "Show Output" with a divider in the label.
+# The label is multi-line, with the first line as a divider and the second line as "Show Output".
 advanced_tag="ADV_SHOW_OUTPUT"
-advanced_label="Show Output"
+advanced_label="---------- Advanced Options ----------\nShow Output"
 checklist_items+=("$advanced_tag" "$advanced_label" "off")
 
 ########################################
-# Display main checklist using dialog (with advanced option attached)
+# Display main checklist using dialog (advanced option attached)
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
@@ -139,15 +136,12 @@ if [ -z "$main_result" ]; then
 fi
 
 # Process result:
-# - Ignore the divider item (DIV_ADV).
-# - If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
+# If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
 SHOW_OUTPUT=0
 selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$main_result"
 for opt in "${selected_options[@]}"; do
-    if [ "$opt" == "$divider_tag" ]; then
-        continue
-    elif [ "$opt" == "$advanced_tag" ]; then
+    if [ "$opt" == "$advanced_tag" ]; then
         SHOW_OUTPUT=1
     else
         selected_numeric+=("$opt")
