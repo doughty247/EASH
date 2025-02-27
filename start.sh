@@ -12,7 +12,7 @@
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a TUI message box is shown.
 #
-set -euo pipefail
+set -uo pipefail  # Removed -e so that failures in sub-scripts do not cause overall exit
 
 # Request sudo permission upfront
 sudo -v
@@ -118,7 +118,7 @@ advanced_label="Show Output"
 checklist_items+=("$advanced_tag" "$advanced_label" "off")
 
 ########################################
-# Display dynamic checklist using dialog (with advanced option)
+# Display dynamic checklist using dialog (Advanced option included)
 ########################################
 result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
@@ -130,9 +130,7 @@ if [ -z "$result" ]; then
     exit 0
 fi
 
-# Process result:
-# - If ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
-# - The remaining numeric options correspond to script selections.
+# Process result: if ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
 SHOW_OUTPUT=0
 selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$result"
@@ -154,31 +152,38 @@ clear_screen() {
 }
 
 ########################################
-# Function to run a script with its output printed directly.
-# Clears the terminal fully before running the subscript,
-# then waits for user input and clears again.
-# If SHOW_OUTPUT is enabled, output is displayed; otherwise, it's hidden.
+# Function to run a subscript
+# Clears the terminal before running the script.
+# If SHOW_OUTPUT is enabled, outputs are printed.
+# Otherwise, the output is hidden, and errors are noted.
 ########################################
 run_script_live() {
     local script_file="$1"
+    local script_name
+    script_name=$(basename "$script_file" _setup.sh)
     clear_screen
-    echo "Running $(basename "$script_file" _setup.sh)..."
+    echo "Running $script_name..."
     echo "----------------------------------------"
     if [ "$SHOW_OUTPUT" -eq 1 ]; then
-        stdbuf -oL ./"$script_file"
+        if ! stdbuf -oL ./"$script_file"; then
+            echo "Error encountered while running $script_name."
+        fi
     else
-        stdbuf -oL ./"$script_file" &>/dev/null
-        echo "(Output hidden)"
+        if ! stdbuf -oL ./"$script_file" &>/dev/null; then
+            echo "Error encountered while running $script_name (output hidden)."
+        else
+            echo "(Output hidden)"
+        fi
     fi
     echo "----------------------------------------"
-    echo "$(basename "$script_file" _setup.sh) completed."
+    echo "$script_name completed."
     echo "Press Enter to continue..."
     read -r
     clear_screen
 }
 
 ########################################
-# Run each selected setup script sequentially
+# Run each selected subscript sequentially
 ########################################
 for opt in "${sorted_options[@]}"; do
     display_name="${OPTION_TO_NAME[$opt]}"
