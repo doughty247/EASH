@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 1.1.11 Stable Release (with Separate Advanced Options)
+# Version: 1.1.11 Stable Release (with Final Report, default subscript selection on, advanced option attached)
 # Last Updated: 2025-02-26
 # Description: EASY - Effortless Automated Self-hosting for You
 # This script checks that you're on Fedora, installs required tools,
@@ -8,8 +8,8 @@
 # that end with "_setup.sh". The displayed names have the suffix removed,
 # underscores replaced with spaces, and each word capitalized.
 # All subscript items are enabled by default.
-# After the main checklist, a separate TUI box titled "Advanced Options"
-# is displayed with a toggle for "Show Output" (default off).
+# The main checklist prompt now includes a note for "Advanced Options"
+# at the bottom (the "Show Output" toggle, default off).
 # The selected sub-scripts are then run sequentially.
 # Before each subscript runs, the terminal (and its scrollback) is fully cleared.
 # After all selected scripts have been executed, a final TUI report is shown,
@@ -115,36 +115,37 @@ for name in "${sorted_display_names[@]}"; do
     ((option_counter++))
 done
 
+# Append advanced option toggle for "Show Output" (default off)
+advanced_tag="ADV_SHOW_OUTPUT"
+advanced_label="Show Output"
+checklist_items+=("$advanced_tag" "$advanced_label" "off")
+
 ########################################
-# Display main checklist using dialog (only subscript items)
+# Display main checklist using dialog with a prompt including advanced options note.
 ########################################
 main_result=$(dialog --clear --backtitle "EASY Checklist" \
   --title "E.A.S.Y. - Effortless Automated Self-hosting for You" \
-  --checklist "Select the setup scripts you want to run (they will execute from top to bottom):" \
-  16 80 6 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
+  --checklist "Select the setup scripts you want to run (they will execute from top to bottom).\n\nAdvanced Options: Toggle 'Show Output' at the bottom." \
+  18 80 8 "${checklist_items[@]}" 3>&1 1>&2 2>&3)
 
 if [ -z "$main_result" ]; then
     dialog --msgbox "No options selected. Exiting." 6 50
     exit 0
 fi
 
+# Process result: if ADV_SHOW_OUTPUT is selected, set SHOW_OUTPUT=1.
+SHOW_OUTPUT=0
+selected_numeric=()
 IFS=' ' read -r -a selected_options <<< "$main_result"
-IFS=$'\n' sorted_options=($(sort -n <<<"${selected_options[*]}"))
+for opt in "${selected_options[@]}"; do
+    if [ "$opt" == "$advanced_tag" ]; then
+        SHOW_OUTPUT=1
+    else
+        selected_numeric+=("$opt")
+    fi
+done
+IFS=$'\n' sorted_options=($(sort -n <<<"${selected_numeric[*]}"))
 unset IFS
-
-########################################
-# Display Advanced Options in a separate box
-########################################
-adv_result=$(dialog --clear --backtitle "Advanced Options" \
-  --title "Advanced Options" \
-  --checklist "Select advanced options:" 8 60 1 \
-  "ADV_SHOW_OUTPUT" "Show Output" off 3>&1 1>&2 2>&3)
-
-if [[ "$adv_result" == *"ADV_SHOW_OUTPUT"* ]]; then
-    SHOW_OUTPUT=1
-else
-    SHOW_OUTPUT=0
-fi
 
 ########################################
 # Global associative array to hold subscript results (on = success, off = failure)
@@ -220,4 +221,3 @@ dialog --checklist "Installation Report: (Checked = Success)" 16 80 ${#report_it
 clear_screen
 dialog --msgbox "All selected setup scripts have been executed." 6 50
 clear_screen
-clear
